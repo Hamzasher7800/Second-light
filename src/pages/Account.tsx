@@ -57,7 +57,12 @@ const Account = () => {
   const handleSubscribe = async () => {
     try {
       const { data, error } = await supabase.functions.invoke('stripe-payment', {
-        body: { type: 'create-checkout-session', userId: user?.id }
+        body: { 
+          type: 'create-checkout-session', 
+          userId: user?.id,
+          successUrl: `${window.location.origin}/account?success=true`,
+          cancelUrl: `${window.location.origin}/account?canceled=true`
+        }
       });
 
       if (error) throw error;
