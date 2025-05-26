@@ -34,8 +34,6 @@ export default defineConfig(({ mode }) => ({
     commonjsOptions: {
       include: [/pdfjs-dist/, /node_modules/],
     },
-    rollupOptions: {
-      external: ['react', 'react-dom'],
-    },
+   
   },
 }));
