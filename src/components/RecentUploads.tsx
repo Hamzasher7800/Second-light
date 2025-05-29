@@ -1,18 +1,20 @@
-
 import { useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { FileText, Upload } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { formatDistanceToNow } from "date-fns";
 import { useDocuments } from "@/hooks/useDocuments";
 import { Skeleton } from "@/components/ui/skeleton";
+import DocumentItem from "@/components/DocumentItem";
 
 const RecentUploads = () => {
   const { documents, isLoading, error, refetchDocuments } = useDocuments();
   
   // Take only the 3 most recent documents, safely handling null/undefined
   const recentUploads = documents?.slice?.(0, 3) || [];
+
+  console.log("RecentUploads documents:", documents);
+  console.log("RecentUploads recentUploads:", recentUploads);
 
   const renderContent = () => {
     if (isLoading) {
@@ -62,50 +64,22 @@ const RecentUploads = () => {
 
     return (
       <div className="space-y-4">
-        {recentUploads.map((doc) => {
-          let formattedDate = "Unknown date";
-          try {
-            if (doc.date) {
-              formattedDate = formatDistanceToNow(new Date(doc.date), { addSuffix: true });
-            }
-          } catch (e) {
-            console.error("Error formatting date:", e);
-          }
-
-          return (
-            <Link 
-              key={doc.id} 
-              to={`/dashboard/documents/${doc.id}`}
-              className="flex items-center p-3 rounded-lg hover:bg-muted transition-colors"
-            >
-              <div className="h-10 w-10 rounded-md bg-second/10 flex items-center justify-center mr-4">
-                <FileText className="h-5 w-5 text-second" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{doc.title || "Untitled Document"}</p>
-                <p className="text-xs text-muted-foreground">{formattedDate}</p>
-              </div>
-              <div className="ml-4">
-                <span className="text-xs bg-second/10 text-second px-2 py-1 rounded">
-                  {doc.type || "Unknown"}
-                </span>
-              </div>
-            </Link>
-          );
-        })}
+        {recentUploads.map((doc) => (
+          <DocumentItem key={doc.id} document={doc} />
+        ))}
       </div>
     );
   };
 
   return (
-    <Card className="w-full">
-      <CardHeader>
+    <Card className="w-full max-w-full">
+      <CardHeader className="max-w-full">
         <CardTitle>Recent Uploads</CardTitle>
         <CardDescription>
           Your recently uploaded documents
         </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="max-w-full px-4 md:px-6">
         {renderContent()}
       </CardContent>
       <CardFooter>

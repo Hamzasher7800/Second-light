@@ -12,6 +12,9 @@ const UploadCard = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [pdfPassword, setPdfPassword] = useState("");
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
   const navigate = useNavigate();
   const { canUploadFile, subscription, isLoading: isLoadingSubscription } = useSubscription();
 
@@ -20,17 +23,13 @@ const UploadCard = () => {
     setIsDragging(true);
   };
 
-  const handleDragLeave = () => {
-    setIsDragging(false);
-  };
+  const handleDragLeave = () => setIsDragging(false);
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const file = e.dataTransfer.files[0];
-      handleFile(file);
+      handleFile(e.dataTransfer.files[0]);
     }
   };
 
@@ -40,61 +39,71 @@ const UploadCard = () => {
       return;
     }
     if (e.target.files && e.target.files.length > 0) {
-      const file = e.target.files[0];
-      handleFile(file);
+      handleFile(e.target.files[0]);
     }
   };
 
   const handleFile = (file: File) => {
-    // Check if file is PDF or image
     const fileType = file.type;
+    const fileName = file.name.toLowerCase();
     if (
       fileType === "application/pdf" ||
-      fileType.startsWith("image/")
+      fileType === "application/msword" ||
+      fileType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+      fileType.startsWith("image/") ||
+      fileName.endsWith(".doc") ||
+      fileName.endsWith(".docx")
     ) {
       setSelectedFile(file);
     } else {
-      toast.error("Please upload a PDF or image file");
+      toast.error("Please upload a PDF, DOC, DOCX, or image file");
     }
   };
 
-  const handleUpload = async () => {
+  const handleUpload = async (password?: string) => {
     if (!selectedFile) return;
     if (!canUploadFile()) {
       toast.error("You must have an active subscription to upload documents.");
       return;
     }
-
     setIsUploading(true);
-
-    // Show loading toast and keep the id
-    const toastId = toast.loading("Uploading and analyzing your document...");
-
     try {
-      toast.loading("Uploading and analyzing your document...");
-      
-      // Determine file type from mime type
-      const fileType = selectedFile.type.startsWith("image/") ? "Image" : "PDF";
-      
-      // Use the file name as the title, but remove the extension
+      let fileType = "Other";
+      if (selectedFile.type.startsWith("image/")) fileType = "Image";
+      else if (selectedFile.type === "application/pdf") fileType = "PDF";
+      else if (
+        selectedFile.type === "application/msword" ||
+        selectedFile.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+        selectedFile.name.toLowerCase().endsWith(".doc") ||
+        selectedFile.name.toLowerCase().endsWith(".docx")
+      ) fileType = "Word Document";
+
       const title = selectedFile.name.replace(/\.[^/.]+$/, "");
-      
+
+      // Pass password if provided
       const document = await documentService.uploadDocument({
         title,
         type: fileType,
-        file: selectedFile
+        file: selectedFile,
+        password,
       });
-      
+
       setSelectedFile(null);
-      
-      // Update the toast to success
-      toast.success("Document uploaded! Analysis in progress...", { id: toastId });
-      
-      // Navigate to document detail page
+      toast.success("Document uploaded! Analysis in progress...");
       navigate(`/dashboard/documents/${document.id}`);
-    } catch (error: any) {
-      // Update the toast to error
-      toast.error(`Upload failed: ${error.message}`, { id: toastId });
+    } catch (error: unknown) {
+      if (error instanceof Error && error.message === "PDF_PASSWORD_REQUIRED") {
+        setPendingFile(selectedFile);
+        setShowPasswordModal(true);
+        return;
+      }
+      if (error instanceof Error && error.message === "PDF_PASSWORD_INCORRECT") {
+        setShowPasswordModal(true);
+        setPdfPassword("");
+        toast.error("Incorrect password. Please try again.");
+        return;
+      }
+      toast.error(`Upload failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setIsUploading(false);
     }
@@ -102,6 +111,15 @@ const UploadCard = () => {
 
   const openFileDialog = () => {
     document.getElementById('file-upload')?.click();
+  };
+
+  const handlePasswordSubmit = async () => {
+    if (!pendingFile) return;
+    setShowPasswordModal(false);
+    setSelectedFile(pendingFile);
+    await handleUpload(pdfPassword);
+    setPdfPassword("");
+    setPendingFile(null);
   };
 
   if (!isLoadingSubscription && (!subscription || subscription.status !== "active")) {
@@ -148,7 +166,6 @@ const UploadCard = () => {
                 <Upload className="h-6 w-6 text-second" />
               )}
             </div>
-            
             <div className="space-y-2">
               <p className="text-sm font-medium">
                 {selectedFile ? selectedFile.name : "Drag and drop your file here"}
@@ -156,11 +173,10 @@ const UploadCard = () => {
               <p className="text-xs text-muted-foreground">
                 {selectedFile 
                   ? `${(selectedFile.size / 1024 / 1024).toFixed(2)} MB` 
-                  : "PDF or image files (max 10MB)"
+                  : "PDF, DOC, DOCX, or image files (max 10MB)"
                 }
               </p>
             </div>
-            
             {!selectedFile && (
               <div className="relative">
                 <TooltipProvider>
@@ -179,13 +195,12 @@ const UploadCard = () => {
                   id="file-upload"
                   name="file-upload"
                   type="file"
-                  accept=".pdf,image/*"
+                  accept=".pdf,.doc,.docx,image/*"
                   className="sr-only"
                   onChange={handleFileChange}
                 />
               </div>
             )}
-            
             {selectedFile && (
               <Button 
                 className="bg-second hover:bg-second-dark text-dark" 
@@ -198,12 +213,30 @@ const UploadCard = () => {
                 {isUploading ? "Processing..." : "Upload and Analyze"}
               </Button>
             )}
-            
             <p className="text-xs text-muted-foreground flex items-center gap-1 mt-2">
               <Shield className="h-3 w-3" /> Your files are encrypted and never shared
             </p>
           </div>
         </div>
+        {/* Password Modal */}
+        {showPasswordModal && (
+          <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50">
+            <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-xs">
+              <h2 className="text-lg font-semibold mb-2">PDF Password Required</h2>
+              <input
+                type="password"
+                className="w-full border rounded px-3 py-2 mb-3"
+                value={pdfPassword}
+                onChange={e => setPdfPassword(e.target.value)}
+                placeholder="Enter PDF password"
+              />
+              <div className="flex justify-end gap-2">
+                <Button onClick={handlePasswordSubmit} className="bg-second text-dark">Submit</Button>
+                <Button variant="outline" onClick={() => setShowPasswordModal(false)}>Cancel</Button>
+              </div>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

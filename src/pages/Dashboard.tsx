@@ -1,4 +1,3 @@
-
 import { useEffect } from "react";
 import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
@@ -27,7 +26,7 @@ const Dashboard = () => {
   }, [user]);
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen overflow-x-hidden">
       <Sidebar />
       
       <div className="flex-1 flex flex-col">
@@ -35,7 +34,7 @@ const Dashboard = () => {
         <MobileMenu />
         
         <main className="flex-1 p-6 md:p-8 overflow-y-auto dashboard-gradient">
-          <div className="max-w-6xl mx-auto">
+          <div className="w-full mx-auto box-border">
             <h1 className="text-2xl md:text-3xl font-medium mb-6 md:mb-8">
               Welcome back{user?.email ? `, ${user.email.split('@')[0]}` : ''}
             </h1>
@@ -47,9 +46,13 @@ const Dashboard = () => {
               {!isLoadingDocuments && !hasDocuments ? (
                 <DashboardEmptyState />
               ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8">
-                  <UploadCard />
-                  <RecentUploads />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 w-full">
+                  <div className="w-full">
+                    <UploadCard />
+                  </div>
+                  <div className="w-full">
+                    <RecentUploads />
+                  </div>
                 </div>
               )}
             </div>

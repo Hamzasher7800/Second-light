@@ -17,6 +17,8 @@ import DocumentDetail from "./pages/DocumentDetail";
 import Account from "./pages/Account";
 import NotFound from "./pages/NotFound";
 import Success from "./pages/Success";
+import Terms from "./pages/Terms";
+import Privacy from "./pages/Privacy";
 
 const queryClient = new QueryClient();
 
@@ -34,6 +36,8 @@ const App = () => (
             <Route path="/auth/signup" element={<Signup />} />
             <Route path="/auth/forgot-password" element={<ForgotPassword />} />
             <Route path="/auth/reset-password" element={<ResetPassword />} />
+            <Route path="/terms" element={<Terms />} />
+            <Route path="/privacy" element={<Privacy />} />
             
             {/* Protected routes */}
             <Route path="/dashboard" element={

@@ -1,4 +1,3 @@
-
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { UploadCloud } from "lucide-react";
@@ -6,8 +5,8 @@ import { Link } from "react-router-dom";
 
 const DashboardEmptyState = () => {
   return (
-    <Card className="w-full">
-      <CardContent className="flex flex-col items-center justify-center py-12">
+    <Card className="w-full max-w-full">
+      <CardContent className="flex flex-col items-center justify-center py-12 max-w-full px-4 md:px-8">
         <div className="rounded-full bg-second/10 p-4 mb-4">
           <UploadCloud className="h-12 w-12 text-second" />
         </div>

@@ -1,4 +1,3 @@
-
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { LogOut, Settings } from "lucide-react";
@@ -20,7 +19,7 @@ const DashboardHeader = () => {
   const userInitial = user?.email?.charAt(0).toUpperCase() || 'U';
 
   return (
-    <header className="w-full border-b border-second/20 py-3 px-6">
+    <header className="w-full max-w-full border-b border-second/20 py-3 px-4 md:px-6">
       <div className="flex items-center justify-between">
         <div className="md:hidden">
           <Link to="/" className="text-xl font-medium">

@@ -1,4 +1,3 @@
-
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { 
@@ -37,7 +36,7 @@ const Sidebar = () => {
   const userEmail = user?.email || 'User';
 
   return (
-    <aside className="w-64 border-r border-second/20 h-screen flex-shrink-0 hidden md:block dashboard-gradient">
+    <aside className="w-full md:w-64 border-r border-second/20 min-h-screen flex-shrink-0 hidden md:block dashboard-gradient relative box-border overflow-y-auto">
       <div className="p-6">
         <Link to="/" className="flex items-center">
           <span className="text-2xl font-medium">Second Light</span>
@@ -65,7 +64,7 @@ const Sidebar = () => {
         </ul>
       </nav>
       
-      <div className="absolute bottom-8 px-6 w-64">
+      <div className="absolute bottom-8 px-6 w-full md:w-64">
         <div className="flex items-center justify-between p-3 rounded-md bg-second/10">
           <div className="flex items-center gap-2">
             <div className="h-8 w-8 rounded-full bg-second flex items-center justify-center text-dark">

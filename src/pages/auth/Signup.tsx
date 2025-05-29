@@ -1,5 +1,4 @@
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Input } from "@/components/ui/input";
@@ -15,13 +14,38 @@ export default function Signup() {
   const [passwordError, setPasswordError] = useState("");
   const [agreedToTerms, setAgreedToTerms] = useState(false);
 
-  const validatePassword = () => {
-    if (password !== confirmPassword) {
+  // Track if user has interacted with confirm password field
+  const [confirmTouched, setConfirmTouched] = useState(false);
+
+  useEffect(() => {
+    const pwd = password.trim();
+    const confirmPwd = confirmPassword.trim();
+
+    if (!pwd && !confirmPwd) {
+      setPasswordError("");
+      return;
+    }
+    if (pwd.length > 0 && pwd.length < 6) {
+      setPasswordError("Password must be at least 6 characters");
+      return;
+    }
+    if (confirmTouched && pwd !== confirmPwd) {
       setPasswordError("Passwords do not match");
+      return;
+    }
+    setPasswordError("");
+  }, [password, confirmPassword, confirmTouched]);
+
+  const validatePassword = () => {
+    const pwd = password.trim();
+    const confirmPwd = confirmPassword.trim();
+
+    if (pwd.length < 6) {
+      setPasswordError("Password must be at least 6 characters");
       return false;
     }
-    if (password.length < 6) {
-      setPasswordError("Password must be at least 6 characters");
+    if (pwd !== confirmPwd) {
+      setPasswordError("Passwords do not match");
       return false;
     }
     setPasswordError("");
@@ -71,10 +95,7 @@ export default function Signup() {
                 type="password"
                 placeholder="••••••••"
                 value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  if (confirmPassword) validatePassword();
-                }}
+                onChange={(e) => setPassword(e.target.value)}
                 required
                 disabled={isLoading}
               />
@@ -88,7 +109,7 @@ export default function Signup() {
                 value={confirmPassword}
                 onChange={(e) => {
                   setConfirmPassword(e.target.value);
-                  if (password) validatePassword();
+                  setConfirmTouched(true);
                 }}
                 required
                 disabled={isLoading}
