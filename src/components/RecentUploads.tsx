@@ -1,75 +1,13 @@
-import { useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { FileText, Upload } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useDocuments } from "@/hooks/useDocuments";
-import { Skeleton } from "@/components/ui/skeleton";
 import DocumentItem from "@/components/DocumentItem";
+import DocumentSkeleton from "@/components/DocumentSkeleton";
+import EmptyDocumentsState from "@/components/EmptyDocumentsState";
 
 const RecentUploads = () => {
   const { documents, isLoading, error, refetchDocuments } = useDocuments();
-  
-  // Take only the 3 most recent documents, safely handling null/undefined
-  const recentUploads = documents?.slice?.(0, 3) || [];
-
-  console.log("RecentUploads documents:", documents);
-  console.log("RecentUploads recentUploads:", recentUploads);
-
-  const renderContent = () => {
-    if (isLoading) {
-      return (
-        <div className="space-y-4">
-          {[...Array(3)].map((_, i) => (
-            <div key={i} className="flex items-center p-3 rounded-lg">
-              <Skeleton className="h-10 w-10 rounded-md mr-4" />
-              <div className="flex-1 min-w-0">
-                <Skeleton className="h-4 w-24 mb-1" />
-                <Skeleton className="h-3 w-16" />
-              </div>
-              <Skeleton className="h-5 w-10 ml-4" />
-            </div>
-          ))}
-        </div>
-      );
-    }
-
-    if (error) {
-      return (
-        <div className="flex flex-col items-center py-8">
-          <p className="text-muted-foreground mb-4">Unable to load documents</p>
-          <Button variant="outline" size="sm" onClick={() => refetchDocuments()}>
-            Try Again
-          </Button>
-        </div>
-      );
-    }
-
-    if (!recentUploads || recentUploads.length === 0) {
-      return (
-        <div className="flex flex-col items-center py-8 text-center">
-          <Upload className="h-10 w-10 text-muted-foreground mb-2" />
-          <p className="text-muted-foreground mb-2">No documents uploaded yet</p>
-          <p className="text-sm text-muted-foreground mb-4">
-            Upload your first document to get started
-          </p>
-          <Link to="/dashboard/documents">
-            <Button variant="outline" size="sm">
-              Upload Now
-            </Button>
-          </Link>
-        </div>
-      );
-    }
-
-    return (
-      <div className="space-y-4">
-        {recentUploads.map((doc) => (
-          <DocumentItem key={doc.id} document={doc} />
-        ))}
-      </div>
-    );
-  };
 
   return (
     <Card className="w-full max-w-full">
@@ -80,7 +18,28 @@ const RecentUploads = () => {
         </CardDescription>
       </CardHeader>
       <CardContent className="max-w-full px-4 md:px-6">
-        {renderContent()}
+        {isLoading ? (
+          <div className="space-y-4">
+            {[...Array(3)].map((_, index) => (
+              <DocumentSkeleton key={index} />
+            ))}
+          </div>
+        ) : error ? (
+          <div className="flex flex-col items-center py-8">
+            <p className="text-muted-foreground mb-4">Unable to load documents</p>
+            <Button variant="outline" size="sm" onClick={() => refetchDocuments()}>
+              Try Again
+            </Button>
+          </div>
+        ) : documents && documents.length > 0 ? (
+          <div className="space-y-4">
+            {documents.slice(0, 3).map((doc) => (
+              <DocumentItem key={doc.id} document={doc} />
+            ))}
+          </div>
+        ) : (
+          <EmptyDocumentsState onUpload={() => {}} />
+        )}
       </CardContent>
       <CardFooter>
         <Link to="/dashboard/documents" className="w-full">
