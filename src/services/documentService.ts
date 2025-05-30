@@ -36,10 +36,17 @@ const SUPABASE_URL = "https://qlkkjojkaoniwhgdxelh.supabase.co";
 export const documentService = {
   // Get all documents for the current user
   async getDocuments(): Promise<Document[]> {
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError || !userData.user) {
+      console.error("User not authenticated", userError);
+      return [];
+    }
+    const userId = userData.user.id;
     const { data: documents, error } = await supabase
       .from("documents")
       .select("*")
-      .order("date", { ascending: false });
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
 
     if (error) {
       console.error("Error fetching documents:", error);

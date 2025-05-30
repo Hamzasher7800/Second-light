@@ -27,51 +27,53 @@ const App = () => (
     <TooltipProvider>
       <BrowserRouter>
         <AuthProvider>
-          <Toaster />
-          <Sonner />
-          <Routes>
-            {/* Public routes */}
-            <Route path="/" element={<Index />} />
-            <Route path="/auth/login" element={<Login />} />
-            <Route path="/auth/signup" element={<Signup />} />
-            <Route path="/auth/forgot-password" element={<ForgotPassword />} />
-            <Route path="/auth/reset-password" element={<ResetPassword />} />
-            <Route path="/terms" element={<Terms />} />
-            <Route path="/privacy" element={<Privacy />} />
-            
-            {/* Protected routes */}
-            <Route path="/dashboard" element={
-              <ProtectedRoute>
-                <Dashboard />
-              </ProtectedRoute>
-            } />
-            <Route path="/dashboard/documents" element={
-              <ProtectedRoute>
-                <Documents />
-              </ProtectedRoute>
-            } />
-            <Route path="/dashboard/documents/:id" element={
-              <ProtectedRoute>
-                <DocumentDetail />
-              </ProtectedRoute>
-            } />
-            <Route path="/dashboard/account" element={
-              <ProtectedRoute>
-                <Account />
-              </ProtectedRoute>
-            } />
-            <Route path="/account" element={
-              <ProtectedRoute>
-                <Account />
-              </ProtectedRoute>
-            } />
-            
-            {/* 404 */}
-            <Route path="*" element={<NotFound />} />
+          <div className="min-h-screen w-full overflow-hidden">
+            <Toaster />
+            <Sonner />
+            <Routes>
+              {/* Public routes */}
+              <Route path="/" element={<Index />} />
+              <Route path="/auth/login" element={<Login />} />
+              <Route path="/auth/signup" element={<Signup />} />
+              <Route path="/auth/forgot-password" element={<ForgotPassword />} />
+              <Route path="/auth/reset-password" element={<ResetPassword />} />
+              <Route path="/terms" element={<Terms />} />
+              <Route path="/privacy" element={<Privacy />} />
+              
+              {/* Protected routes */}
+              <Route path="/dashboard" element={
+                <ProtectedRoute>
+                  <Dashboard />
+                </ProtectedRoute>
+              } />
+              <Route path="/dashboard/documents" element={
+                <ProtectedRoute>
+                  <Documents />
+                </ProtectedRoute>
+              } />
+              <Route path="/dashboard/documents/:id" element={
+                <ProtectedRoute>
+                  <DocumentDetail />
+                </ProtectedRoute>
+              } />
+              <Route path="/dashboard/account" element={
+                <ProtectedRoute>
+                  <Account />
+                </ProtectedRoute>
+              } />
+              <Route path="/account" element={
+                <ProtectedRoute>
+                  <Account />
+                </ProtectedRoute>
+              } />
+              
+              {/* 404 */}
+              <Route path="*" element={<NotFound />} />
 
-            {/* New route */}
-            <Route path="/success" element={<Success />} />
-          </Routes>
+              {/* Success route */}
+              <Route path="/success" element={<Success />} />
+            </Routes>
+          </div>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>

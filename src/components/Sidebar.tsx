@@ -28,7 +28,7 @@ const Sidebar = () => {
       title: "Account",
       icon: <Settings className="h-5 w-5" />,
       href: "/dashboard/account",
-    }
+    },
   ];
 
   // Get first letter of email for avatar
@@ -36,24 +36,25 @@ const Sidebar = () => {
   const userEmail = user?.email || 'User';
 
   return (
-    <aside className="w-full md:w-64 border-r border-second/20 min-h-screen flex-shrink-0 hidden md:block dashboard-gradient relative box-border overflow-y-auto">
+    <aside className="hidden md:flex flex-col w-64 h-screen bg-sidebar-background border-r border-sidebar-border">
       <div className="p-6">
-        <Link to="/" className="flex items-center">
-          <span className="text-2xl font-medium">Second Light</span>
+        <Link to="/" className="flex items-center gap-2">
+          
+          <span className="text-lg font-semibold">Second Light</span>
         </Link>
       </div>
 
-      <nav className="px-3 mt-6">
-        <ul className="space-y-2">
+      <nav className="flex-1 px-3 py-4">
+        <ul className="space-y-1">
           {menu.map((item) => (
-            <li key={item.title}>
+            <li key={item.href}>
               <Link
                 to={item.href}
                 className={cn(
-                  "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium",
+                  "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
                   location.pathname === item.href
-                    ? "bg-second text-dark"
-                    : "text-dark-light hover:bg-second/10 hover:text-dark transition-colors"
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent/50"
                 )}
               >
                 {item.icon}
@@ -63,26 +64,15 @@ const Sidebar = () => {
           ))}
         </ul>
       </nav>
-      
-      <div className="absolute bottom-8 px-6 w-full md:w-64">
-        <div className="flex items-center justify-between p-3 rounded-md bg-second/10">
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-full bg-second flex items-center justify-center text-dark">
-              <User className="h-4 w-4" />
-            </div>
-            <div className="text-sm">
-              <p className="font-medium">{userInitial}</p>
-              <p className="text-xs text-muted-foreground">{userEmail}</p>
-            </div>
-          </div>
-          <button 
-            onClick={signOut}
-            className="text-dark-light hover:text-second transition-colors"
-            title="Sign out"
-          >
-            <LogOut className="h-4 w-4" />
-          </button>
-        </div>
+
+      <div className="p-4 border-t border-sidebar-border">
+        <button
+          onClick={signOut}
+          className="flex items-center gap-3 w-full px-3 py-2 rounded-md text-sm text-sidebar-foreground hover:bg-sidebar-accent/50 transition-colors"
+        >
+          <LogOut className="h-5 w-5" />
+          Sign Out
+        </button>
       </div>
     </aside>
   );

@@ -1,3 +1,4 @@
+
 import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
 import MobileMenu from "@/components/MobileMenu";
@@ -28,7 +29,7 @@ const Documents = () => {
         <MobileMenu />
         
         <main className="flex-1 p-6 md:p-8 overflow-y-auto dashboard-gradient">
-          <div className="w-full mx-auto box-border">
+          <div className="max-w-6xl mx-auto">
             <div className="flex items-center justify-between mb-8">
               <h1 className="text-3xl font-medium">Documents</h1>
               <Button 
