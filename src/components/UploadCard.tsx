@@ -79,7 +79,7 @@ const UploadCard = () => {
       ) fileType = "Word Document";
 
       const title = selectedFile.name.replace(/\.[^/.]+$/, "");
-
+      
       // Pass password if provided
       const document = await documentService.uploadDocument({
         title,
@@ -87,7 +87,7 @@ const UploadCard = () => {
         file: selectedFile,
         password,
       });
-
+      
       setSelectedFile(null);
       toast.success("Document uploaded! Analysis in progress...");
       navigate(`/dashboard/documents/${document.id}`);

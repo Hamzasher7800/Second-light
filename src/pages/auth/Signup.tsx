@@ -7,20 +7,17 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 
 export default function Signup() {
-  const { signUp, isLoading } = useAuth();
+  const { signupPendingUser, isLoading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [agreedToTerms, setAgreedToTerms] = useState(false);
-
-  // Track if user has interacted with confirm password field
   const [confirmTouched, setConfirmTouched] = useState(false);
 
   useEffect(() => {
     const pwd = password.trim();
     const confirmPwd = confirmPassword.trim();
-
     if (!pwd && !confirmPwd) {
       setPasswordError("");
       return;
@@ -39,7 +36,6 @@ export default function Signup() {
   const validatePassword = () => {
     const pwd = password.trim();
     const confirmPwd = confirmPassword.trim();
-
     if (pwd.length < 6) {
       setPasswordError("Password must be at least 6 characters");
       return false;
@@ -54,13 +50,9 @@ export default function Signup() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!agreedToTerms) {
-      return;
-    }
-    
+    if (!agreedToTerms) return;
     if (validatePassword()) {
-      await signUp(email, password);
+      await signupPendingUser(email, password);
     }
   };
 
@@ -73,7 +65,6 @@ export default function Signup() {
           </Link>
           <p className="text-dark-light mt-2">Create an account to get started</p>
         </div>
-
         <div className="bg-white p-8 rounded-lg shadow-sm">
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
@@ -145,7 +136,6 @@ export default function Signup() {
             </Button>
           </form>
         </div>
-        
         <div className="text-center mt-6">
           <p className="text-dark-light">
             Already have an account?{" "}

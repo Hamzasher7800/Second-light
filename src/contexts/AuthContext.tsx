@@ -1,15 +1,18 @@
-
 import { createContext, useContext, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 
-type AuthContextType = {
+const SUPABASE_EDGE_URL = "https://qlkkjojkaoniwhgdxelh.supabase.co/functions/v1";
+
+// Add new types for custom signup/verification
+export type AuthContextType = {
   user: User | null;
   session: Session | null;
   isLoading: boolean;
-  signUp: (email: string, password: string) => Promise<void>;
+  signupPendingUser: (email: string, password: string) => Promise<void>;
+  verifyEmailToken: (token: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
 };
@@ -55,28 +58,63 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  async function signUp(email: string, password: string) {
+  // Custom signup: call the edge function
+  async function signupPendingUser(email: string, password: string) {
     setIsLoading(true);
-    
     try {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-      });
-
-      if (error) throw error;
+      // Store password temporarily for verification
+      localStorage.setItem('temp_password', password);
       
+      const res = await fetch(`${SUPABASE_EDGE_URL}/signup-pending-user`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(err);
+      }
       toast({
         title: "Account created!",
         description: "Please check your email to verify your account.",
       });
-      
       navigate('/auth/login');
-    } catch (error: any) {
+    } catch (error: unknown) {
+      // Clear temporary password on error
+      localStorage.removeItem('temp_password');
       toast({
         variant: "destructive",
         title: "Error",
-        description: error.message,
+        description: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  // Custom verification: call the edge function
+  async function verifyEmailToken(token: string) {
+    setIsLoading(true);
+    try {
+      const res = await fetch(`${SUPABASE_EDGE_URL}/verify-email-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token })
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(err);
+      }
+      toast({
+        title: "Email verified!",
+        description: "You can now log in.",
+      });
+      navigate('/auth/login');
+    } catch (error: unknown) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error instanceof Error ? error.message : String(error),
       });
     } finally {
       setIsLoading(false);
@@ -94,11 +132,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) throw error;
       navigate('/dashboard');
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         variant: "destructive",
         title: "Login failed",
-        description: error.message,
+        description: error instanceof Error ? error.message : String(error),
       });
     } finally {
       setIsLoading(false);
@@ -111,7 +149,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await supabase.auth.signOut();
       navigate('/');
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         variant: "destructive",
         title: "Error",
@@ -123,7 +161,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, session, isLoading, signUp, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, session, isLoading, signupPendingUser, verifyEmailToken, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );

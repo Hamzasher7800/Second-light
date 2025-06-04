@@ -75,17 +75,17 @@ const UploadDialog = ({ onClose, onUploadComplete }: UploadDialogProps) => {
       }
     } else {
       // Check if file is PDF, DOC, DOCX, or image
-      const fileType = file.type;
+    const fileType = file.type;
       const fileName = file.name.toLowerCase();
-      if (
-        fileType === "application/pdf" ||
+    if (
+      fileType === "application/pdf" ||
         fileType === "application/msword" ||
         fileType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
         fileType.startsWith("image/") ||
         fileName.endsWith(".doc") ||
         fileName.endsWith(".docx")
-      ) {
-        setSelectedFile(file);
+    ) {
+      setSelectedFile(file);
         setPdfError(null);
       } else {
         setUploadError("Please upload a PDF, DOC, DOCX, or image file");
@@ -107,7 +107,7 @@ const UploadDialog = ({ onClose, onUploadComplete }: UploadDialogProps) => {
     } catch (err: any) {
       if (err?.name === "PasswordException") {
         setPdfError("Incorrect password. Please try again.");
-      } else {
+    } else {
         setPdfError("Failed to read PDF file.");
       }
     }
