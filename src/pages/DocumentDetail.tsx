@@ -371,7 +371,7 @@ const DocumentDetail = () => {
               <p className="mb-6 text-muted-foreground text-center">
                 You need an active subscription to view document results. Please subscribe to unlock this feature.
               </p>
-              <Link to="/account">
+              <Link to="/dashboard/account">
                 <Button>Go to Subscription Page</Button>
               </Link>
             </div>
