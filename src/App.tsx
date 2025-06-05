@@ -63,7 +63,7 @@ const App = () => (
                   <Account />
                 </ProtectedRoute>
               } />
-              <Route path="/account" element={
+              <Route path="/dashboard/account" element={
                 <ProtectedRoute>
                   <Account />
                 </ProtectedRoute>
