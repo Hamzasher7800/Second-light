@@ -109,7 +109,7 @@ serve(async (req) => {
     });
 
     // Send email via SendGrid
-    const BASE_URL = Deno.env.get("BASE_URL") || "http://localhost:8080";
+    const BASE_URL = Deno.env.get("BASE_URL") || "https://second-light-ai.netlify.app";
     const verificationUrl = `${BASE_URL}/verify-email?token=${token}`;
     const sendgridRes = await fetch("https://api.sendgrid.com/v3/mail/send", {
       method: "POST",
