@@ -60,17 +60,21 @@ const Account = () => {
         body: { 
           type: 'create-checkout-session', 
           userId: user?.id,
-          domain: window.location.origin
+          domain: 'https://second-light-ai.netlify.app'
         }
       });
 
       if (error) throw error;
-      window.location.href = data.url;
+      if (data?.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error('No checkout URL received');
+      }
     } catch (error) {
       console.error('Error creating checkout session:', error);
       toast({
         title: "Error",
-        description: "Failed to create checkout session",
+        description: "Failed to create checkout session. Please try again.",
         variant: "destructive",
       });
     }
@@ -82,17 +86,21 @@ const Account = () => {
         body: { 
           type: 'create-portal-session', 
           userId: user?.id,
-          domain: window.location.origin
+          domain: 'https://second-light-ai.netlify.app'
         }
       });
 
       if (error) throw error;
-      window.location.href = data.url;
+      if (data?.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error('No portal URL received');
+      }
     } catch (error) {
       console.error('Error creating portal session:', error);
       toast({
         title: "Error",
-        description: "Failed to open customer portal",
+        description: "Failed to open customer portal. Please try again.",
         variant: "destructive",
       });
     }
