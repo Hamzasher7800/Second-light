@@ -371,9 +371,9 @@ const DocumentDetail = () => {
               <p className="mb-6 text-muted-foreground text-center">
                 You need an active subscription to view document results. Please subscribe to unlock this feature.
               </p>
-              <Button onClick={() => window.location.href = '/account'}>
-                Go to Subscription Page
-              </Button>
+              <Link to="/account">
+                <Button>Go to Subscription Page</Button>
+              </Link>
             </div>
           </main>
         </div>
