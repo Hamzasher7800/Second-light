@@ -3,14 +3,18 @@ import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
 import MobileMenu from "@/components/MobileMenu";
 import UploadCard from "@/components/UploadCard";
-import RecentUploads from "@/components/RecentUploads";
 import UsageSummary from "@/components/UsageSummary";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
 import DashboardEmptyState from "@/components/DashboardEmptyState";
 import { useDocuments } from "@/hooks/useDocuments";
 import { useSubscription } from "@/hooks/useSubscription";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
+import { Link } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import DocumentSkeleton from "@/components/DocumentSkeleton";
+import DocumentItem from "@/components/DocumentItem";
+import EmptyDocumentsState from "@/components/EmptyDocumentsState";
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -32,7 +36,7 @@ const Dashboard = () => {
     <div className="flex min-h-screen w-full overflow-x-hidden">
       <Sidebar />
       
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 md:ml-64">
         <DashboardHeader />
         <MobileMenu />
         
@@ -83,16 +87,45 @@ const Dashboard = () => {
               
               {!isLoadingDocuments && !hasDocuments ? (
                 <DashboardEmptyState />
-              ) : (
+              ) : user ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 w-full min-w-0">
                   <div className="w-full max-w-full min-w-0">
                     <UploadCard />
                   </div>
                   <div className="w-full max-w-full min-w-0">
-                    <RecentUploads />
+                    <Card className="w-full max-w-full">
+                      <CardHeader className="max-w-full">
+                        <CardTitle>Recent Uploads</CardTitle>
+                        <CardDescription>Your recently uploaded documents</CardDescription>
+                      </CardHeader>
+                      <CardContent className="max-w-full px-4 md:px-6">
+                        {isLoadingDocuments ? (
+                          <div className="space-y-4">
+                            {[...Array(3)].map((_, index) => (
+                              <DocumentSkeleton key={index} />
+                            ))}
+                          </div>
+                        ) : documents && documents.length > 0 ? (
+                          <div className="space-y-4">
+                            {documents.slice(0, 3).map((doc) => (
+                              <DocumentItem key={doc.id} document={doc} />
+                            ))}
+                          </div>
+                        ) : (
+                          <EmptyDocumentsState onUpload={() => {}} />
+                        )}
+                      </CardContent>
+                      <CardFooter>
+                        <Link to="/dashboard/documents" className="w-full">
+                          <Button variant="outline" className="w-full">
+                            View All Documents
+                          </Button>
+                        </Link>
+                      </CardFooter>
+                    </Card>
                   </div>
                 </div>
-              )}
+              ) : null}
             </div>
           </div>
         </main>

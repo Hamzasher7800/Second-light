@@ -35,8 +35,9 @@ const Sidebar = () => {
   const userInitial = user?.email?.charAt(0).toUpperCase() || 'U';
   const userEmail = user?.email || 'User';
 
+  // Sidebar is hidden on mobile; navigation is handled by MobileMenu
   return (
-    <aside className="hidden md:flex flex-col w-64 h-screen bg-sidebar-background border-r border-sidebar-border">
+    <aside className="hidden md:flex flex-col w-64 h-screen bg-sidebar-background border-r border-sidebar-border fixed top-0 left-0 overflow-hidden">
       <div className="p-6">
         <Link to="/" className="flex items-center gap-2">
           

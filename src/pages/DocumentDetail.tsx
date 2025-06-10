@@ -20,6 +20,7 @@ const DocumentDetail = () => {
   const { user } = useAuth();
   const [subscription, setSubscription] = useState<{ status: string } | null>(null);
   const [isLoadingSubscription, setIsLoadingSubscription] = useState(true);
+  const [fileUrl, setFileUrl] = useState<string | null>(null);
 
   // Add logging
   useEffect(() => {
@@ -88,6 +89,30 @@ const DocumentDetail = () => {
     };
     fetchSubscriptionStatus();
   }, [user]);
+
+  // Generate public or signed URL for the original file
+  useEffect(() => {
+    const getFileUrl = async () => {
+      if (doc?.file_path) {
+        // Try to get a public URL first
+        const { data, error } = supabase.storage.from('documents').getPublicUrl(doc.file_path);
+        if (data?.publicUrl) {
+          setFileUrl(data.publicUrl);
+        } else {
+          // If the bucket is private, try to get a signed URL
+          const { data: signedData, error: signedError } = await supabase.storage.from('documents').createSignedUrl(doc.file_path, 60 * 60);
+          if (signedData?.signedUrl) {
+            setFileUrl(signedData.signedUrl);
+          } else {
+            setFileUrl(null);
+          }
+        }
+      } else {
+        setFileUrl(null);
+      }
+    };
+    getFileUrl();
+  }, [doc?.file_path]);
 
   const handleDownloadReport = () => {
     if (!doc) return;
@@ -417,8 +442,8 @@ const DocumentDetail = () => {
                   variant="outline"
                   className="w-full sm:w-auto"
                   onClick={() => {
-                    if (doc.file_url) {
-                      window.open(doc.file_url, "_blank");
+                    if (fileUrl) {
+                      window.open(fileUrl, "_blank");
                     } else {
                       toast({
                         title: "File not available",

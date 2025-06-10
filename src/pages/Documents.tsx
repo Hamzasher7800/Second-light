@@ -23,16 +23,16 @@ const Documents = () => {
     <div className="flex min-h-screen">
       <Sidebar />
       
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col md:ml-64">
         <DashboardHeader />
         <MobileMenu />
         
-        <main className="flex-1 p-6 md:p-8 overflow-y-auto dashboard-gradient">
+        <main className="flex-1 p-4 sm:p-6 md:p-8 overflow-y-auto dashboard-gradient">
           <div className="max-w-6xl mx-auto">
-            <div className="flex items-center justify-between mb-8">
-              <h1 className="text-3xl font-medium">Documents</h1>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+              <h1 className="text-2xl sm:text-3xl font-medium">Documents</h1>
               <Button 
-                className="bg-second hover:bg-second-dark text-dark"
+                className="bg-second hover:bg-second-dark text-dark w-full sm:w-auto"
                 onClick={() => setUploadDialogOpen(true)}
               >
                 <Plus className="h-4 w-4 mr-2" /> New Upload
@@ -40,15 +40,15 @@ const Documents = () => {
             </div>
             
             <Card>
-              <div className="p-6">
+              <div className="p-4 sm:p-6">
                 {isLoading ? (
-                  <div className="space-y-6">
+                  <div className="space-y-4 sm:space-y-6">
                     {[...Array(3)].map((_, index) => (
                       <DocumentSkeleton key={index} />
                     ))}
                   </div>
                 ) : documents && documents.length > 0 ? (
-                  <div className="space-y-6">
+                  <div className="space-y-4 sm:space-y-6">
                     {documents.map((doc) => (
                       <DocumentItem key={doc.id} document={doc} />
                     ))}

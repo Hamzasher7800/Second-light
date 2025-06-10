@@ -1,4 +1,4 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useDocuments } from "@/hooks/useDocuments";
@@ -13,9 +13,7 @@ const RecentUploads = () => {
     <Card className="w-full max-w-full">
       <CardHeader className="max-w-full">
         <CardTitle>Recent Uploads</CardTitle>
-        <CardDescription>
-          Your recently uploaded documents
-        </CardDescription>
+        <CardDescription>Your recently uploaded documents</CardDescription>
       </CardHeader>
       <CardContent className="max-w-full px-4 md:px-6">
         {isLoading ? (
@@ -52,4 +50,4 @@ const RecentUploads = () => {
   );
 };
 
-export default RecentUploads;
+export default RecentUploads; 
