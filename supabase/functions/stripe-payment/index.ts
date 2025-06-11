@@ -148,10 +148,21 @@ serve(async (req)=>{
           });
         }
 
-        // Fetch the user's subscription start date
-        const { data: profile } = await supabaseClient.from('profiles').select('subscription_start_date').eq('id', userId).single();
-        const subscriptionStart = profile?.subscription_start_date || '1970-01-01';
-        const { data: reports } = await supabaseClient.from('documents').select('id').eq('user_id', userId).gte('created_at', subscriptionStart);
+        // Use current billing period start for report calculation
+        const currentPeriodStart = new Date(subscription.current_period_start * 1000).toISOString();
+        console.log('Calculating reports for period starting:', currentPeriodStart);
+        
+        const { data: reports, error: reportsError } = await supabaseClient
+          .from('documents')
+          .select('id, created_at')
+          .eq('user_id', userId)
+          .gte('created_at', currentPeriodStart);
+          
+        if (reportsError) {
+          console.error('Error fetching reports:', reportsError);
+        }
+        
+        console.log('Reports found:', reports?.length || 0, 'reports:', reports);
         const reportsUsed = reports?.length || 0;
         const reportsRemaining = Math.max(0, 30 - reportsUsed);
 
