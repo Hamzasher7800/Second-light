@@ -93,16 +93,16 @@ const DocumentDetail = () => {
   // Generate public or signed URL for the original file
   useEffect(() => {
     const getFileUrl = async () => {
-      if (doc?.file_path) {
+      if (doc && 'file_path' in doc && doc.file_path) {
         // Try to get a public URL first
-        const { data, error } = supabase.storage.from('documents').getPublicUrl(doc.file_path);
-        if (data?.publicUrl) {
-          setFileUrl(data.publicUrl);
+        const publicResult = supabase.storage.from('documents').getPublicUrl(doc.file_path);
+        if (publicResult.data?.publicUrl) {
+          setFileUrl(publicResult.data.publicUrl);
         } else {
           // If the bucket is private, try to get a signed URL
-          const { data: signedData, error: signedError } = await supabase.storage.from('documents').createSignedUrl(doc.file_path, 60 * 60);
-          if (signedData?.signedUrl) {
-            setFileUrl(signedData.signedUrl);
+          const signedResult = await supabase.storage.from('documents').createSignedUrl(doc.file_path, 60 * 60);
+          if (signedResult.data?.signedUrl) {
+            setFileUrl(signedResult.data.signedUrl);
           } else {
             setFileUrl(null);
           }
@@ -112,7 +112,7 @@ const DocumentDetail = () => {
       }
     };
     getFileUrl();
-  }, [doc?.file_path]);
+  }, [doc]);
 
   const handleDownloadReport = () => {
     if (!doc) return;
@@ -249,7 +249,7 @@ const DocumentDetail = () => {
       <div className="flex min-h-screen">
         <Sidebar />
         
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col md:ml-64">
           <DashboardHeader />
           <MobileMenu />
           
@@ -309,7 +309,7 @@ const DocumentDetail = () => {
       <div className="flex min-h-screen">
         <Sidebar />
         
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col md:ml-64">
           <DashboardHeader />
           <MobileMenu />
           
@@ -349,7 +349,7 @@ const DocumentDetail = () => {
       <div className="flex min-h-screen">
         <Sidebar />
         
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col md:ml-64">
           <DashboardHeader />
           <MobileMenu />
           
@@ -387,7 +387,7 @@ const DocumentDetail = () => {
     return (
       <div className="flex min-h-screen">
         <Sidebar />
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col md:ml-64">
           <DashboardHeader />
           <MobileMenu />
           <main className="flex-1 p-6 md:p-8 overflow-y-auto dashboard-gradient">
@@ -418,7 +418,7 @@ const DocumentDetail = () => {
     <div className="flex min-h-screen">
       <Sidebar />
       
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col md:ml-64">
         <DashboardHeader />
         <MobileMenu />
         
@@ -438,23 +438,9 @@ const DocumentDetail = () => {
               </div>
               
               <div className="flex flex-wrap items-center gap-3">
-                <Button
-                  variant="outline"
-                  className="w-full sm:w-auto"
-                  onClick={() => {
-                    if (fileUrl) {
-                      window.open(fileUrl, "_blank");
-                    } else {
-                      toast({
-                        title: "File not available",
-                        description: "The original file could not be found.",
-                        variant: "destructive",
-                      });
-                    }
-                  }}
-                >
-                  <FileText className="h-4 w-4 mr-2" /> View Original
-                </Button>
+                <a href={fileUrl} target="_blank" rel="noopener noreferrer">
+                  <Button>View Original</Button>
+                </a>
                 <Button
                   className="bg-second hover:bg-second-dark text-dark w-full sm:w-auto"
                   onClick={handleDownloadReport}

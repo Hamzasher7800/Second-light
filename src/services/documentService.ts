@@ -14,6 +14,7 @@ export interface Document {
   user_id: string;
   processing_status?: string;
   error_message?: string;
+  file_path?: string;
 }
 
 export interface DocumentDetail extends Document {
@@ -23,6 +24,7 @@ export interface DocumentDetail extends Document {
     explanation: string;
   }[];
   recommendations: string[];
+  file_path?: string;
 }
 
 export interface DocumentUpload {
