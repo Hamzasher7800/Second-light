@@ -11,48 +11,18 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useLocation } from "react-router-dom";
-
-interface SubscriptionStatus {
-  status: 'active' | 'inactive';
-  reportsRemaining: number;
-  nextBillingDate: string | null;
-}
+import { useSubscription } from "@/hooks/useSubscription";
 
 const Account = () => {
   const { profile, isLoading, updateProfile, updatePassword } = useProfile();
   const { user } = useAuth();
-  const [subscription, setSubscription] = useState<SubscriptionStatus | null>(null);
-  const [isLoadingSubscription, setIsLoadingSubscription] = useState(true);
+  const { subscription, isLoading: isLoadingSubscription, hasActiveAccess } = useSubscription();
   const location = useLocation();
   const params = new URLSearchParams(location.search);
   const isSuccess = params.get("success");
   const isCanceled = params.get("canceled");
 
-  const fetchSubscriptionStatus = async () => {
-    try {
-      const { data, error } = await supabase.functions.invoke('stripe-payment', {
-        body: { type: 'get-subscription', userId: user?.id }
-      });
 
-      if (error) throw error;
-      setSubscription(data);
-    } catch (error) {
-      console.error('Error fetching subscription:', error);
-      toast({
-        title: "Error",
-        description: "Failed to fetch subscription status",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoadingSubscription(false);
-    }
-  };
-
-  useEffect(() => {
-    if (user) {
-      fetchSubscriptionStatus();
-    }
-  }, [user]);
 
   const handleSubscribe = async () => {
     try {
@@ -118,8 +88,6 @@ const Account = () => {
         title: "Success",
         description: "Your subscription will be canceled at the end of the billing period",
       });
-      
-      fetchSubscriptionStatus();
     } catch (error) {
       console.error('Error canceling subscription:', error);
       toast({
@@ -184,34 +152,57 @@ const Account = () => {
                           <div>
                             <h3 className="font-medium">Current Plan</h3>
                             <p className="text-muted-foreground">
-                              {subscription?.status === 'active' ? 'Monthly Subscription' : 'No Active Subscription'}
+                              {hasActiveAccess() 
+                                ? subscription?.status === 'cancelled' 
+                                  ? 'Monthly Subscription (Cancelled)' 
+                                  : 'Monthly Subscription'
+                                : 'No Active Subscription'}
                             </p>
                           </div>
                           <div>
                             <span className="text-xl font-medium">$9.99/month</span>
                           </div>
                         </div>
-                        {subscription?.status === 'active' && (
+                        {hasActiveAccess() && (
                           <div className="text-sm text-muted-foreground">
-                            <p>Next billing date: {new Date(subscription.nextBillingDate!).toLocaleDateString()}</p>
+                            {subscription?.status === 'cancelled' ? (
+                              <p className="text-orange-600 font-medium">
+                                Subscription cancelled - Access until: {new Date(subscription.currentPeriodEnd || subscription.nextBillingDate!).toLocaleDateString()}
+                              </p>
+                            ) : (
+                              <p>Next billing date: {new Date(subscription.nextBillingDate!).toLocaleDateString()}</p>
+                            )}
                             <p className="mt-2">Reports remaining this month: {subscription.reportsRemaining}/30</p>
                           </div>
                         )}
                       </div>
                       
                       <div className="flex flex-col sm:flex-row gap-4">
-                        {subscription?.status === 'active' ? (
+                        {hasActiveAccess() ? (
                           <>
-                            <Button variant="outline" onClick={handleManageSubscription}>
-                              Manage Payment Methods
-                            </Button>
-                            <Button 
-                              variant="outline" 
-                              className="text-destructive"
-                              onClick={handleCancelSubscription}
-                            >
-                              Cancel Subscription
-                            </Button>
+                            {subscription?.status === 'cancelled' ? (
+                              <div className="flex flex-col gap-2">
+                                <p className="text-sm text-muted-foreground">
+                                  Your subscription is cancelled and will end on {new Date(subscription.currentPeriodEnd || subscription.nextBillingDate!).toLocaleDateString()}
+                                </p>
+                                <Button onClick={handleSubscribe}>
+                                  Reactivate Subscription
+                                </Button>
+                              </div>
+                            ) : (
+                              <>
+                                <Button variant="outline" onClick={handleManageSubscription}>
+                                  Manage Payment Methods
+                                </Button>
+                                <Button 
+                                  variant="outline" 
+                                  className="text-destructive"
+                                  onClick={handleCancelSubscription}
+                                >
+                                  Cancel Subscription
+                                </Button>
+                              </>
+                            )}
                           </>
                         ) : (
                           <Button onClick={handleSubscribe}>

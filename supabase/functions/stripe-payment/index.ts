@@ -63,7 +63,7 @@ serve(async (req)=>{
       }).eq('id', userId);
     }
     switch(type){
-      case 'create-checkout-session':
+      case 'create-checkout-session': {
         const session = await stripe.checkout.sessions.create({
           customer: customerId,
           line_items: [
@@ -92,7 +92,8 @@ serve(async (req)=>{
             'Content-Type': 'application/json'
           }
         });
-      case 'create-portal-session':
+      }
+      case 'create-portal-session': {
         const portalSession = await stripe.billingPortal.sessions.create({
           customer: customerId,
           return_url: `${DOMAIN}/account`
@@ -106,13 +107,15 @@ serve(async (req)=>{
             'Content-Type': 'application/json'
           }
         });
-      case 'get-subscription':
+      }
+      case 'get-subscription': {
         const subscriptions = await stripe.subscriptions.list({
           customer: customerId,
           limit: 1
         });
         const subscription = subscriptions.data[0];
-        if (!subscription || subscription.status !== 'active') {
+        
+        if (!subscription) {
           return new Response(JSON.stringify({
             status: 'inactive',
             reportsRemaining: 0,
@@ -125,16 +128,45 @@ serve(async (req)=>{
             }
           });
         }
+
+        // Check if subscription is active or cancelled but still has access
+        const isActive = subscription.status === 'active';
+        const isCancelledButActive = subscription.status === 'active' && subscription.cancel_at_period_end;
+        const hasAccess = isActive || (subscription.status === 'cancelled' && new Date() < new Date(subscription.current_period_end * 1000));
+
+        if (!hasAccess) {
+          return new Response(JSON.stringify({
+            status: 'inactive',
+            reportsRemaining: 0,
+            nextBillingDate: null
+          }), {
+            status: 200,
+            headers: {
+              ...corsHeaders,
+              'Content-Type': 'application/json'
+            }
+          });
+        }
+
         // Fetch the user's subscription start date
         const { data: profile } = await supabaseClient.from('profiles').select('subscription_start_date').eq('id', userId).single();
         const subscriptionStart = profile?.subscription_start_date || '1970-01-01';
         const { data: reports } = await supabaseClient.from('documents').select('id').eq('user_id', userId).gte('created_at', subscriptionStart);
         const reportsUsed = reports?.length || 0;
         const reportsRemaining = Math.max(0, 30 - reportsUsed);
+
+        // Determine status to return
+        let statusToReturn = subscription.status;
+        if (subscription.cancel_at_period_end || isCancelledButActive) {
+          statusToReturn = 'cancelled';
+        }
+
         return new Response(JSON.stringify({
-          status: subscription.status,
+          status: statusToReturn,
           reportsRemaining,
-          nextBillingDate: new Date(subscription.current_period_end * 1000).toISOString()
+          nextBillingDate: new Date(subscription.current_period_end * 1000).toISOString(),
+          cancelAtPeriodEnd: subscription.cancel_at_period_end,
+          currentPeriodEnd: new Date(subscription.current_period_end * 1000).toISOString()
         }), {
           status: 200,
           headers: {
@@ -142,7 +174,8 @@ serve(async (req)=>{
             'Content-Type': 'application/json'
           }
         });
-      case 'cancel-subscription':
+      }
+      case 'cancel-subscription': {
         const activeSubscriptions = await stripe.subscriptions.list({
           customer: customerId,
           status: 'active',
@@ -159,11 +192,18 @@ serve(async (req)=>{
             }
           });
         }
-        const canceledSubscription = await stripe.subscriptions.del(activeSubscriptions.data[0].id);
-        console.log('Canceled subscription:', canceledSubscription);
+        
+        // Cancel at period end instead of immediately
+        const canceledSubscription = await stripe.subscriptions.update(
+          activeSubscriptions.data[0].id,
+          { cancel_at_period_end: true }
+        );
+        
+        console.log('Canceled subscription at period end:', canceledSubscription);
         return new Response(JSON.stringify({
-          status: canceledSubscription.status,
-          cancelAt: canceledSubscription.canceled_at ? new Date(canceledSubscription.canceled_at * 1000).toISOString() : null
+          status: 'cancelled',
+          cancelAtPeriodEnd: canceledSubscription.cancel_at_period_end,
+          currentPeriodEnd: new Date(canceledSubscription.current_period_end * 1000).toISOString()
         }), {
           status: 200,
           headers: {
@@ -171,6 +211,7 @@ serve(async (req)=>{
             'Content-Type': 'application/json'
           }
         });
+      }
       default:
         return new Response(JSON.stringify({
           error: 'Invalid request type'

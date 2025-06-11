@@ -20,7 +20,7 @@ const Dashboard = () => {
   const { user } = useAuth();
   const { documents, isLoading: isLoadingDocuments } = useDocuments();
   const hasDocuments = documents && documents.length > 0;
-  const { subscription, isLoading: isLoadingSubscription } = useSubscription();
+  const { subscription, isLoading: isLoadingSubscription, hasActiveAccess } = useSubscription();
   
   useEffect(() => {
     // Show welcome toast if user is logged in
@@ -66,8 +66,10 @@ const Dashboard = () => {
                       <div className="text-2xl font-semibold">
                         {isLoadingSubscription
                           ? "..."
-                          : subscription?.status === "active"
-                          ? "Monthly"
+                          : hasActiveAccess()
+                          ? subscription?.status === "cancelled"
+                            ? "Cancelled"
+                            : "Monthly"
                           : "Free"}
                       </div>
                     </div>

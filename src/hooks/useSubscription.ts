@@ -4,9 +4,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 
 interface SubscriptionStatus {
-  status: 'active' | 'inactive';
+  status: 'active' | 'inactive' | 'cancelled' | 'past_due' | 'trialing';
   reportsRemaining: number;
   nextBillingDate: string | null;
+  cancelAtPeriodEnd?: boolean;
+  currentPeriodEnd?: string;
 }
 
 export function useSubscription() {
@@ -40,8 +42,28 @@ export function useSubscription() {
     }
   }, [user]);
 
+  // Check if user has active access (including cancelled subs that haven't expired)
+  const hasActiveAccess = () => {
+    if (!subscription) return false;
+    
+    // Active subscriptions have access
+    if (subscription.status === 'active') return true;
+    
+    // Cancelled subscriptions have access until period end
+    if (subscription.status === 'cancelled' && subscription.currentPeriodEnd) {
+      const periodEnd = new Date(subscription.currentPeriodEnd);
+      const now = new Date();
+      return now < periodEnd;
+    }
+    
+    // Trialing subscriptions have access
+    if (subscription.status === 'trialing') return true;
+    
+    return false;
+  };
+
   const canUploadFile = () => {
-    if (!subscription || subscription.status !== 'active') {
+    if (!hasActiveAccess()) {
       toast({
         title: "Subscription Required",
         description: "Please subscribe to upload files",
@@ -65,6 +87,7 @@ export function useSubscription() {
   return {
     subscription,
     isLoading,
+    hasActiveAccess,
     canUploadFile,
     refreshSubscription: fetchSubscriptionStatus
   };

@@ -12,14 +12,14 @@ import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import jsPDF from "jspdf";
 import { supabase } from "@/integrations/supabase/client";
+import { useSubscription } from "@/hooks/useSubscription";
 
 const DocumentDetail = () => {
   const { id = "" } = useParams<{ id: string }>();
   const { document: doc, isLoading, error, refetchDocument } = useDocumentDetail(id);
   const [isProcessing, setIsProcessing] = useState(false);
   const { user } = useAuth();
-  const [subscription, setSubscription] = useState<{ status: string } | null>(null);
-  const [isLoadingSubscription, setIsLoadingSubscription] = useState(true);
+  const { subscription, isLoading: isLoadingSubscription, hasActiveAccess } = useSubscription();
   const [fileUrl, setFileUrl] = useState<string | null>(null);
 
   // Add logging
@@ -72,23 +72,7 @@ const DocumentDetail = () => {
     }
   }, [doc, isProcessing]);
 
-  useEffect(() => {
-    const fetchSubscriptionStatus = async () => {
-      if (!user) return;
-      try {
-        const { data, error } = await supabase.functions.invoke('stripe-payment', {
-          body: { type: 'get-subscription', userId: user.id }
-        });
-        if (error) throw error;
-        setSubscription(data);
-      } catch (error) {
-        setSubscription(null);
-      } finally {
-        setIsLoadingSubscription(false);
-      }
-    };
-    fetchSubscriptionStatus();
-  }, [user]);
+
 
   // Generate public or signed URL for the original file
   useEffect(() => {
@@ -383,7 +367,7 @@ const DocumentDetail = () => {
   }
 
   // Restrict access if not subscribed
-  if (!isLoadingSubscription && subscription?.status !== 'active') {
+  if (!isLoadingSubscription && !hasActiveAccess()) {
     return (
       <div className="flex min-h-screen">
         <Sidebar />
