@@ -1,6 +1,5 @@
-
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -12,28 +11,38 @@ export default function ResetPassword() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [passwordError, setPasswordError] = useState("");
+  const [token, setToken] = useState("");
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   useEffect(() => {
-    // Check if we have the recovery token in the URL
-    const hash = window.location.hash;
-    if (!hash || !hash.includes("type=recovery")) {
+    // Get token from URL search params
+    const resetToken = searchParams.get('token');
+    
+    if (!resetToken) {
       toast({
         variant: "destructive",
         title: "Invalid reset link",
         description: "This password reset link is invalid or has expired.",
       });
       navigate("/auth/login");
+      return;
     }
-  }, [navigate]);
+    
+    setToken(resetToken);
+  }, [navigate, searchParams]);
 
   const validatePassword = () => {
     if (password !== confirmPassword) {
       setPasswordError("Passwords do not match");
       return false;
     }
-    if (password.length < 6) {
-      setPasswordError("Password must be at least 6 characters");
+    if (password.length < 8) {
+      setPasswordError("Password must be at least 8 characters");
+      return false;
+    }
+    if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(password)) {
+      setPasswordError("Password must contain at least one uppercase letter, one lowercase letter, and one number");
       return false;
     }
     setPasswordError("");
@@ -47,26 +56,39 @@ export default function ResetPassword() {
       return;
     }
     
+    if (!token) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Invalid reset token. Please request a new password reset link.",
+      });
+      return;
+    }
+    
     setIsLoading(true);
 
     try {
-      const { error } = await supabase.auth.updateUser({
-        password,
+      const { data, error } = await supabase.functions.invoke('reset-password-confirm', {
+        body: { 
+          token,
+          newPassword: password 
+        }
       });
 
       if (error) throw error;
       
       toast({
         title: "Password updated",
-        description: "Your password has been successfully updated.",
+        description: data || "Your password has been successfully updated. You can now log in with your new password.",
       });
       
       navigate("/auth/login");
     } catch (error: any) {
+      console.error("Password update error:", error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: error.message,
+        description: error.message || "Failed to update password. The reset link may have expired. Please request a new one.",
       });
     } finally {
       setIsLoading(false);
