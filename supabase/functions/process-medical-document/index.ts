@@ -75,42 +75,180 @@ serve(async (req)=>{
     }
     const text = documentText;
     // Call OpenAI to analyze the document
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
+    let response;
+    try {
+      response = await openai.chat.completions.create({
+        model: "gpt-4",
       messages: [
         {
           role: "system",
-          content:
-            "You are a medical document analyzer. ONLY process documents that are written in English and are medical in nature (e.g., medical reports, lab results, prescriptions, doctor's notes, or documents discussing medical issues, symptoms, diagnoses, or treatments). If the document is not in English or is not a medical document, respond with a JSON object: {\"error\": \"This document is not a valid English medical document.\"}. Otherwise, extract key information from the document and provide a response in JSON format. Do not include any markdown formatting or backticks. The response should be a valid JSON object with this structure:\n{\n  \"summary\": \"Brief 2-3 sentence overview of the document\",\n  \"key_findings\": [\n    { \"marker\": \"Finding name or category\", \"explanation\": \"Detailed explanation of the finding\" }\n  ],\n  \"recommendations\": [\"List of recommendations based on findings\"]\n}"
+            content: `You are a medical document analyzer capable of processing any type of medical document in any language. Your tasks are:
+
+1. If the document is not in English, first translate it to English (do not include the translation in your response).
+2. Analyze the (translated) document and extract as much structured information as possible, even if the document is narrative or not in a standard format.
+3. Always return your response in English, in the following JSON format:
+{
+  "summary": "Brief 2-3 sentence overview of the document",
+  "key_findings": [
+    {
+      "marker": "Diagnosis, symptom, medication, allergy, lab result, or other key finding (inferred or explicit)",
+      "value": "Details or value if available, otherwise 'Not specified'",
+      "reference_range": "Normal range if applicable, otherwise ''",
+      "interpretation": "Clinical interpretation or significance, otherwise ''",
+      "category": "Diagnosis | Symptom | Medication | Allergy | Lab Result | History | Other"
+    }
+  ],
+  "metadata": {
+    "patient_info": {
+      "date": "Document date if available, otherwise ''",
+      "provider": "Healthcare provider if available, otherwise ''",
+      "facility": "Medical facility if available, otherwise ''"
+    }
+  },
+  "recommendations": [
+    "List of recommendations, follow-ups, or next steps"
+  ],
+  "critical_values": [
+    "Any values or findings that require immediate attention"
+  ]
+}
+
+- If a field is not present in the document, fill it with an empty string or 'Not specified'.
+- If the document is not medical in nature, respond ONLY with this JSON: {"error": "This document does not appear to be a medical document"}
+- Do NOT include the translation in your response, only the analysis in English.
+- If the document is corrupted or unreadable, respond with a summary explaining that no meaningful information could be extracted.
+- **Never leave key_findings empty for a medical document. If explicit findings are not present, INFER or SUMMARIZE likely diagnoses, medications, symptoms, or other findings based on the content. Always provide at least 2-3 key findings, even if they must be inferred from the context.**
+- **EXAMPLES for narrative:**
+  - marker: "Diagnosis", value: "Colitis Ulcerosa", category: "Diagnosis"
+  - marker: "Medication", value: "Prednisone 10mg daily", category: "Medication"
+  - marker: "Symptom", value: "Dyspnoea", category: "Symptom"
+  - marker: "Allergy", value: "Penicillin", category: "Allergy"
+  - marker: "Lab Result", value: "Hemoglobin 12.5 g/dL", reference_range: "13-17 g/dL", interpretation: "Low", category: "Lab Result"`
         },
         {
           role: "user",
           content: text
         }
       ],
-      temperature: 0.7,
-      max_tokens: 1000,
-      response_format: {
-        type: "json_object"
-      } // Enforce JSON response format
-    });
+        temperature: 0.2,
+        max_tokens: 2000
+      });
+    } catch (apiError) {
+      console.error("OpenAI API Error:", apiError);
+      throw new Error(`OpenAI API error: ${apiError.message}`);
+    }
+
     // Parse the response with better error handling
     let analysis;
     try {
-      const content = response.choices[0].message.content;
+      const content = response?.choices?.[0]?.message?.content;
+      
       if (!content) {
-        throw new Error("Empty response from OpenAI");
+        console.error("Empty or invalid response:", response);
+        throw new Error("Empty or invalid response from OpenAI");
       }
-      // Remove any potential markdown formatting if present
-      const cleanJson = content.replace(/```json\n?|\n?```/g, '').trim();
+
+      try {
+        // Try to parse the content directly first
+        analysis = JSON.parse(content.trim());
+      } catch (jsonError) {
+        // If direct parsing fails, try to clean the content first
+        console.error("Initial JSON Parse Error:", jsonError);
+        // Remove any potential markdown formatting or extra text
+        const cleanJson = content
+          .replace(/```json\n?|\n?```/g, '')
+          .replace(/^[\s\n]*{/, '{')
+          .replace(/}[\s\n]*$/, '}')
+          .trim();
+        
+        try {
       analysis = JSON.parse(cleanJson);
-      // If OpenAI returns an error object, throw an error
+        } catch (secondJsonError) {
+          console.error("JSON Parse Error after cleaning:", secondJsonError);
+          console.error("Raw content:", content);
+          console.error("Cleaned content:", cleanJson);
+          throw new Error(`Invalid JSON response from OpenAI: ${secondJsonError.message}`);
+        }
+      }
+
+      // Validate the response structure
+      if (!analysis || typeof analysis !== 'object') {
+        throw new Error("Response is not a valid object");
+      }
+
+      // Special handling for error responses
       if (analysis.error) {
+        // Log the text content for debugging
+        console.log("Document text being analyzed:", text);
+        // If it looks like a lab report but was rejected, override the error
+        if (text.toLowerCase().includes('blood') || 
+            text.toLowerCase().includes('test') || 
+            text.toLowerCase().includes('laboratory') ||
+            text.toLowerCase().includes('specimen')) {
+          console.log("Detected medical terms in document, proceeding with analysis");
+          throw new Error("Document appears to be medical but analysis failed");
+        }
         throw new Error(analysis.error);
       }
+
+      // Validate required fields
+      if (!analysis.summary || !Array.isArray(analysis.key_findings)) {
+        console.error("Invalid response structure:", analysis);
+        throw new Error("Response missing required fields (summary or key_findings)");
+      }
+
+      // Ensure each key finding has the required structure
+      analysis.key_findings.forEach((finding, index) => {
+        if (!finding.marker || !finding.value) {
+          throw new Error(`Invalid key finding at index ${index}: missing required fields`);
+        }
+      });
+
+      if (!analysis.key_findings || analysis.key_findings.length === 0) {
+        // Fallback: second OpenAI call for key findings extraction
+        const fallbackResponse = await openai.chat.completions.create({
+          model: "gpt-4",
+          messages: [
+            {
+              role: "system",
+              content: `You are an expert medical information extractor. Given the following medical report, extract all possible key findings as a JSON array. Each finding should have:
+- marker: Diagnosis, medication, symptom, allergy, lab result, or other key finding (inferred or explicit)
+- value: Details or value if available, otherwise 'Not specified'
+- reference_range: Normal range if applicable, otherwise ''
+- interpretation: Clinical interpretation or significance, otherwise ''
+- category: Diagnosis | Symptom | Medication | Allergy | Lab Result | History | Other
+
+Return ONLY a JSON array of findings, e.g.:
+[
+  {"marker": "Diagnosis", "value": "Colitis Ulcerosa", "reference_range": "", "interpretation": "", "category": "Diagnosis"},
+  {"marker": "Medication", "value": "Prednisone 10mg daily", "reference_range": "", "interpretation": "", "category": "Medication"}
+]`
+            },
+            {
+              role: "user",
+              content: text
+            }
+          ],
+          temperature: 0.2,
+          max_tokens: 1000
+        });
+
+        // Parse the fallback response
+        let fallbackFindings = [];
+        try {
+          const fallbackContent = fallbackResponse?.choices?.[0]?.message?.content;
+          fallbackFindings = JSON.parse(fallbackContent.trim());
+          if (Array.isArray(fallbackFindings) && fallbackFindings.length > 0) {
+            analysis.key_findings = fallbackFindings;
+          }
+        } catch (e) {
+          console.error("Fallback extraction failed:", e);
+        }
+      }
+
     } catch (parseError) {
       console.error("Error parsing OpenAI response:", parseError);
-      throw new Error("Failed to parse document analysis results");
+      throw new Error(`Failed to parse document analysis results: ${parseError.message}`);
     }
     // Update the document with the analysis results
     const { error: updateError } = await supabaseClient.from("documents").update({
@@ -125,11 +263,17 @@ serve(async (req)=>{
     }
     // Insert key findings
     if (analysis.key_findings && analysis.key_findings.length > 0) {
-      const { error: findingsError } = await supabaseClient.from("key_findings").upsert(analysis.key_findings.map((finding)=>({
+      const { error: findingsError } = await supabaseClient.from("key_findings").upsert(
+        analysis.key_findings.map((finding) => ({
           document_id: documentId,
           marker: finding.marker,
-          explanation: finding.explanation
-        })));
+          value: finding.value || finding.explanation || "Not specified",
+          reference_range: finding.reference_range,
+          interpretation: finding.interpretation,
+          category: finding.category,
+          explanation: finding.explanation || finding.value || "Not specified", // for backward compatibility
+        }))
+      );
       if (findingsError) {
         console.error("Error inserting key findings:", findingsError);
       }
@@ -215,3 +359,4 @@ serve(async (req)=>{
     });
   }
 });
+

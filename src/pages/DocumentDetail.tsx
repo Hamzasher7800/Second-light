@@ -72,8 +72,6 @@ const DocumentDetail = () => {
     }
   }, [doc, isProcessing]);
 
-
-
   // Generate public or signed URL for the original file
   useEffect(() => {
     const getFileUrl = async () => {
@@ -96,6 +94,10 @@ const DocumentDetail = () => {
       }
     };
     getFileUrl();
+  }, [doc]);
+
+  useEffect(() => {
+    console.log('Key Findings:', doc?.key_findings);
   }, [doc]);
 
   const handleDownloadReport = () => {
@@ -146,11 +148,29 @@ const DocumentDetail = () => {
         pdf.text(markerLines, leftMargin, y);
         y += markerLines.length * 7;
 
-        // Finding explanation
+        // Finding details
         pdf.setTextColor(89, 89, 89);
-        const explanationLines = pdf.splitTextToSize(finding.explanation, contentWidth);
-        pdf.text(explanationLines, leftMargin + 5, y);
-        y += explanationLines.length * 6;
+        pdf.setFontSize(10);
+        
+        // Value
+        const valueText = `Value: ${finding.value || finding.explanation}`;
+        pdf.text(valueText, leftMargin + 5, y);
+        y += 6;
+
+        // Reference Range
+        if (finding.reference_range) {
+          const rangeText = `Reference Range: ${finding.reference_range}`;
+          pdf.text(rangeText, leftMargin + 5, y);
+          y += 6;
+        }
+
+        // Interpretation
+        if (finding.interpretation) {
+          const interpretationLines = pdf.splitTextToSize(finding.interpretation, contentWidth - 10);
+          pdf.text(interpretationLines, leftMargin + 5, y);
+          y += interpretationLines.length * 6;
+        }
+
         y += 5; // Space between findings
       });
     } else {
@@ -436,6 +456,32 @@ const DocumentDetail = () => {
             
             <Card className="mb-6 md:mb-8">
               <CardHeader>
+                <CardTitle>Document Information</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {doc.metadata?.patient_info && (
+                    <div>
+                      <h3 className="text-sm font-medium mb-1">Provider Information</h3>
+                      <div className="text-sm text-muted-foreground space-y-1">
+                        {doc.metadata.patient_info.provider && (
+                          <p>Provider: {doc.metadata.patient_info.provider}</p>
+                        )}
+                        {doc.metadata.patient_info.facility && (
+                          <p>Facility: {doc.metadata.patient_info.facility}</p>
+                        )}
+                        {doc.metadata.patient_info.date && (
+                          <p>Document Date: {doc.metadata.patient_info.date}</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card className="mb-6 md:mb-8">
+              <CardHeader>
                 <CardTitle>Summary</CardTitle>
               </CardHeader>
               <CardContent>
@@ -449,11 +495,44 @@ const DocumentDetail = () => {
               </CardHeader>
               <CardContent>
                 {doc.key_findings && doc.key_findings.length > 0 ? (
+                  <div className="space-y-8">
+                    {/* Group findings by category */}
+                    {Object.entries(
+                      doc.key_findings.reduce((acc, finding) => {
+                        const category = finding.category || "Other Findings";
+                        if (!acc[category]) {
+                          acc[category] = [];
+                        }
+                        acc[category].push(finding);
+                        return acc;
+                      }, {} as Record<string, typeof doc.key_findings>)
+                    ).map(([category, findings]) => (
+                      <div key={category} className="space-y-4">
+                        <h3 className="text-lg font-medium border-b pb-2">{category}</h3>
                   <div className="space-y-6">
-                    {doc.key_findings.map((finding, index) => (
-                      <div key={index} className="border-b border-border pb-6 last:border-0 last:pb-0">
-                        <h3 className="font-medium mb-2">{finding.marker}</h3>
-                        <p className="text-sm text-muted-foreground">{finding.explanation}</p>
+                          {findings.map((finding, index) => (
+                            <div key={index} className="border-b border-border pb-4 last:border-0 last:pb-0">
+                              <h4 className="font-medium mb-2">{finding.marker}</h4>
+                              <div className="space-y-2">
+                                <div className="flex flex-col space-y-1">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-sm font-medium">Value:</span>
+                                    <span className="text-sm">{finding.value || finding.explanation}</span>
+                                  </div>
+                                  {finding.reference_range && (
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-sm font-medium">Reference Range:</span>
+                                      <span className="text-sm">{finding.reference_range}</span>
+                                    </div>
+                                  )}
+                                </div>
+                                {finding.interpretation && (
+                                  <p className="text-sm text-muted-foreground">{finding.interpretation}</p>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -462,6 +541,21 @@ const DocumentDetail = () => {
                 )}
               </CardContent>
             </Card>
+
+            {doc.critical_values && doc.critical_values.length > 0 && (
+              <Card className="mb-6 md:mb-8">
+                <CardHeader>
+                  <CardTitle>Critical Values</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ul className="list-disc pl-5 space-y-2 text-red-600">
+                    {doc.critical_values.map((value, index) => (
+                      <li key={index}>{value}</li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+            )}
             
             <Card>
               <CardHeader>

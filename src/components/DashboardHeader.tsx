@@ -29,7 +29,9 @@ const DashboardHeader = () => {
         <div className="hidden md:block">
           <h1 className="text-lg font-medium">Dashboard</h1>
         </div>
-        <div className="flex items-center space-x-4">
+        
+        {/* User Avatar - Hidden on mobile to avoid conflict with hamburger menu */}
+        <div className="hidden md:flex items-center space-x-4">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button 
@@ -63,6 +65,9 @@ const DashboardHeader = () => {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+        
+        {/* Mobile: Reserve space for hamburger menu */}
+        <div className="md:hidden w-10"></div>
       </div>
     </header>
   );

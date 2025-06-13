@@ -18,13 +18,24 @@ export interface Document {
 }
 
 export interface DocumentDetail extends Document {
-  summary: string;
+  document_type: string;
+  metadata?: {
+    patient_info?: {
+      date?: string;
+      provider?: string;
+      facility?: string;
+    };
+  };
   key_findings: {
     marker: string;
-    explanation: string;
+    value: string;
+    reference_range?: string;
+    interpretation?: string;
+    category?: string;
   }[];
   recommendations: string[];
-  file_path?: string;
+  critical_values?: string[];
+  summary: string;
 }
 
 export interface DocumentUpload {
@@ -114,7 +125,7 @@ export const documentService = {
       // Get key findings
       const { data: keyFindings, error: findingsError } = await supabase
         .from("key_findings")
-        .select("marker, explanation")
+        .select("marker, value, reference_range, interpretation, category")
         .eq("document_id", id);
 
       if (findingsError) {

@@ -23,32 +23,37 @@ const Documents = () => {
     <div className="flex min-h-screen">
       <Sidebar />
       
-      <div className="flex-1 flex flex-col md:ml-64">
+      <div className="flex-1 flex flex-col md:ml-64 relative min-w-0">
         <DashboardHeader />
         <MobileMenu />
         
-        <main className="flex-1 p-4 sm:p-6 md:p-8 overflow-y-auto dashboard-gradient">
-          <div className="max-w-6xl mx-auto">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
-              <h1 className="text-2xl sm:text-3xl font-medium">Documents</h1>
-              <Button 
-                className="bg-second hover:bg-second-dark text-dark w-full sm:w-auto"
-                onClick={() => setUploadDialogOpen(true)}
-              >
-                <Plus className="h-4 w-4 mr-2" /> New Upload
-              </Button>
+        <main className="flex-1 p-3 sm:p-4 md:p-6 lg:p-8 overflow-y-auto dashboard-gradient">
+          <div className="max-w-6xl mx-auto w-full">
+            <div className="flex flex-col gap-3 sm:gap-4 mb-6 sm:mb-8">
+              <div className="pr-12 sm:pr-16 md:pr-0">
+                <h1 className="text-xl sm:text-2xl md:text-3xl font-medium break-words">Documents</h1>
+              </div>
+              <div className="w-full">
+                <Button 
+                  className="bg-second hover:bg-second-dark text-dark w-full sm:w-auto min-w-0"
+                  onClick={() => setUploadDialogOpen(true)}
+                >
+                  <Plus className="h-4 w-4 mr-2 flex-shrink-0" /> 
+                  <span className="truncate">New Upload</span>
+                </Button>
+              </div>
             </div>
             
-            <Card>
-              <div className="p-4 sm:p-6">
+            <Card className="w-full">
+              <div className="p-3 sm:p-4 md:p-6">
                 {isLoading ? (
-                  <div className="space-y-4 sm:space-y-6">
+                  <div className="space-y-3 sm:space-y-4 md:space-y-6">
                     {[...Array(3)].map((_, index) => (
                       <DocumentSkeleton key={index} />
                     ))}
                   </div>
                 ) : documents && documents.length > 0 ? (
-                  <div className="space-y-4 sm:space-y-6">
+                  <div className="space-y-3 sm:space-y-4 md:space-y-6">
                     {documents.map((doc) => (
                       <DocumentItem key={doc.id} document={doc} />
                     ))}
@@ -63,7 +68,7 @@ const Documents = () => {
       </div>
 
       <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md mx-4 sm:mx-auto">
           <DialogHeader>
             <DialogTitle>Upload Medical Document</DialogTitle>
           </DialogHeader>

@@ -87,7 +87,7 @@ export default function ForgotPassword() {
     <div className="min-h-screen flex items-center justify-center landing-gradient px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-medium">Second Light</h1>
+            <h1 className="text-3xl font-medium">Second Light</h1>
           <p className="text-dark-light mt-2">Reset your password</p>
         </div>
 
@@ -115,34 +115,34 @@ export default function ForgotPassword() {
                   please contact support at support@second-light-ai.com for manual password reset.
                 </p>
               </div>
-              <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="name@example.com"
-                    value={email}
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="name@example.com"
+                  value={email}
                     onChange={(e) => {
                       setEmail(e.target.value);
                       if (emailError) setEmailError("");
                     }}
-                    required
-                    disabled={isLoading}
+                  required
+                  disabled={isLoading}
                     className={emailError ? "border-red-500" : ""}
-                  />
+                />
                   {emailError && (
                     <p className="text-red-500 text-sm mt-1">{emailError}</p>
                   )}
-                </div>
-                <Button 
-                  type="submit" 
-                  className="w-full bg-second hover:bg-second-dark text-dark"
+              </div>
+              <Button 
+                type="submit" 
+                className="w-full bg-second hover:bg-second-dark text-dark"
                   disabled={isLoading || !email.trim()}
-                >
-                  {isLoading ? "Sending..." : "Send reset link"}
-                </Button>
-              </form>
+              >
+                {isLoading ? "Sending..." : "Send reset link"}
+              </Button>
+            </form>
             </>
           )}
         </div>

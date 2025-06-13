@@ -22,8 +22,6 @@ const Account = () => {
   const isSuccess = params.get("success");
   const isCanceled = params.get("canceled");
 
-
-
   const handleSubscribe = async () => {
     try {
       const { data, error } = await supabase.functions.invoke('stripe-payment', {
@@ -102,21 +100,26 @@ const Account = () => {
     <div className="flex min-h-screen">
       <Sidebar />
       
-      <div className="flex-1 flex flex-col md:ml-64">
+      <div className="flex-1 flex flex-col md:ml-64 relative min-w-0">
         <DashboardHeader />
         <MobileMenu />
         
-        <main className="flex-1 p-6 md:p-8 overflow-y-auto dashboard-gradient">
-          <div className="max-w-3xl mx-auto">
-            <h1 className="text-3xl font-medium mb-8">Account Settings</h1>
+        <main className="flex-1 p-3 sm:p-4 md:p-6 lg:p-8 overflow-y-auto dashboard-gradient">
+          <div className="max-w-4xl mx-auto w-full">
+            <div className="pr-12 sm:pr-16 md:pr-0 mb-6 sm:mb-8">
+              <h1 className="text-2xl sm:text-3xl font-medium break-words">Account Settings</h1>
+            </div>
             
-            <div className="space-y-8">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Profile Information</CardTitle>
-                  <CardDescription>Update your account profile details</CardDescription>
+            <div className="space-y-6 sm:space-y-8">
+              {/* Profile Information Card */}
+              <Card className="w-full">
+                <CardHeader className="p-4 sm:p-6">
+                  <CardTitle className="text-lg sm:text-xl">Profile Information</CardTitle>
+                  <CardDescription className="text-sm sm:text-base">
+                    Update your account profile details
+                  </CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-4 sm:p-6 pt-0">
                   {profile ? (
                     <ProfileForm 
                       initialData={{
@@ -128,30 +131,33 @@ const Account = () => {
                       isLoading={isLoading}
                     />
                   ) : (
-                    <div className="py-4 text-center text-muted-foreground">
+                    <div className="py-6 sm:py-8 text-center text-muted-foreground text-sm sm:text-base">
                       Loading profile information...
                     </div>
                   )}
                 </CardContent>
               </Card>
               
-              <Card>
-                <CardHeader>
-                  <CardTitle>Subscription</CardTitle>
-                  <CardDescription>Manage your subscription plan</CardDescription>
+              {/* Subscription Card */}
+              <Card className="w-full">
+                <CardHeader className="p-4 sm:p-6">
+                  <CardTitle className="text-lg sm:text-xl">Subscription</CardTitle>
+                  <CardDescription className="text-sm sm:text-base">
+                    Manage your subscription plan
+                  </CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-4 sm:p-6 pt-0">
                   {isLoadingSubscription ? (
-                    <div className="py-4 text-center text-muted-foreground">
+                    <div className="py-6 sm:py-8 text-center text-muted-foreground text-sm sm:text-base">
                       Loading subscription information...
                     </div>
                   ) : (
                     <>
-                      <div className="bg-light-dark p-5 rounded-lg mb-6">
-                        <div className="flex items-center justify-between mb-4">
-                          <div>
-                            <h3 className="font-medium">Current Plan</h3>
-                            <p className="text-muted-foreground">
+                      <div className="bg-light-dark p-4 sm:p-5 rounded-lg mb-4 sm:mb-6">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-3 sm:mb-4">
+                          <div className="min-w-0 flex-1">
+                            <h3 className="font-medium text-sm sm:text-base">Current Plan</h3>
+                            <p className="text-muted-foreground text-xs sm:text-sm break-words">
                               {hasActiveAccess() 
                                 ? subscription?.status === 'cancelled' 
                                   ? 'Monthly Subscription (Cancelled)' 
@@ -159,53 +165,67 @@ const Account = () => {
                                 : 'No Active Subscription'}
                             </p>
                           </div>
-                          <div>
-                            <span className="text-xl font-medium">$9.99/month</span>
+                          <div className="flex-shrink-0">
+                            <span className="text-lg sm:text-xl font-medium">$9.99/month</span>
                           </div>
                         </div>
                         {hasActiveAccess() && (
-                          <div className="text-sm text-muted-foreground">
+                          <div className="text-xs sm:text-sm text-muted-foreground space-y-2">
                             {subscription?.status === 'cancelled' ? (
-                              <p className="text-orange-600 font-medium">
+                              <p className="text-orange-600 font-medium break-words">
                                 Subscription cancelled - Access until: {new Date(subscription.currentPeriodEnd || subscription.nextBillingDate!).toLocaleDateString()}
                               </p>
                             ) : (
-                              <p>Next billing date: {new Date(subscription.nextBillingDate!).toLocaleDateString()}</p>
+                              <p className="break-words">
+                                Next billing date: {new Date(subscription.nextBillingDate!).toLocaleDateString()}
+                              </p>
                             )}
-                            <p className="mt-2">Reports remaining this month: {subscription.reportsRemaining}/30</p>
+                            <p className="break-words">
+                              Reports remaining this month: {subscription.reportsRemaining}/30
+                            </p>
                           </div>
                         )}
                       </div>
                       
-                      <div className="flex flex-col sm:flex-row gap-4">
+                      <div className="flex flex-col gap-3 sm:gap-4">
                         {hasActiveAccess() ? (
                           <>
                             {subscription?.status === 'cancelled' ? (
-                              <div className="flex flex-col gap-2">
-                                <p className="text-sm text-muted-foreground">
+                              <div className="space-y-3">
+                                <p className="text-xs sm:text-sm text-muted-foreground break-words">
                                   Your subscription is cancelled and will end on {new Date(subscription.currentPeriodEnd || subscription.nextBillingDate!).toLocaleDateString()}
                                 </p>
-                                <Button onClick={handleSubscribe}>
+                                <Button 
+                                  onClick={handleSubscribe}
+                                  className="w-full sm:w-auto text-sm sm:text-base"
+                                >
                                   Reactivate Subscription
                                 </Button>
                               </div>
                             ) : (
-                              <>
-                                <Button variant="outline" onClick={handleManageSubscription}>
-                                  Manage Payment Methods
-                                </Button>
+                              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                                 <Button 
                                   variant="outline" 
-                                  className="text-destructive"
-                                  onClick={handleCancelSubscription}
+                                  onClick={handleManageSubscription}
+                                  className="w-full sm:w-auto text-sm sm:text-base"
                                 >
-                                  Cancel Subscription
-                                </Button>
-                              </>
+                              Manage Payment Methods
+                            </Button>
+                            <Button 
+                              variant="outline" 
+                                  className="text-destructive w-full sm:w-auto text-sm sm:text-base"
+                              onClick={handleCancelSubscription}
+                            >
+                              Cancel Subscription
+                            </Button>
+                              </div>
                             )}
                           </>
                         ) : (
-                          <Button onClick={handleSubscribe}>
+                          <Button 
+                            onClick={handleSubscribe}
+                            className="w-full sm:w-auto text-sm sm:text-base"
+                          >
                             Subscribe Now
                           </Button>
                         )}
@@ -215,14 +235,15 @@ const Account = () => {
                 </CardContent>
               </Card>
               
-
-              
-              <Card>
-                <CardHeader>
-                  <CardTitle>Security</CardTitle>
-                  <CardDescription>Update your password</CardDescription>
+              {/* Security Card */}
+              <Card className="w-full">
+                <CardHeader className="p-4 sm:p-6">
+                  <CardTitle className="text-lg sm:text-xl">Security</CardTitle>
+                  <CardDescription className="text-sm sm:text-base">
+                    Update your password
+                  </CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-4 sm:p-6 pt-0">
                   <PasswordForm
                     onSubmit={updatePassword}
                     isLoading={isLoading}
