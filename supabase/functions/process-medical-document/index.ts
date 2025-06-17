@@ -16,43 +16,61 @@ function validateRequest(data) {
   if (!data.documentTitle) {
     throw new Error("Document title is required");
   }
-  if (!data.documentText) {
-    throw new Error("Document text is required for analysis");
+  // Only require documentText if documentImage is not present
+  if (!data.documentText && !data.documentImage) {
+    throw new Error("Either document text or document image is required for analysis");
   }
 }
 serve(async (req)=>{
+  let startTime = performance.now();
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
     return new Response("ok", {
       headers: corsHeaders
     });
   }
-  try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      throw new Error("Missing Authorization header");
-    }
+
     // Setup clients
+  // @ts-expect-error Deno global is only available in Deno runtime, not Node
     const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+  // @ts-expect-error Deno global is only available in Deno runtime, not Node
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
+  // @ts-expect-error Deno global is only available in Deno runtime, not Node
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
     const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
       global: {
         headers: {
-          Authorization: authHeader
-        }
+        Authorization: req.headers.get("Authorization")
+      }
       }
     });
-    // Ensure storage bucket exists
-    // await ensureStorageBucketExists(supabaseUrl, supabaseServiceKey);
+  // @ts-expect-error Deno global is only available in Deno runtime, not Node
     const openai = new OpenAI({
       apiKey: Deno.env.get("OPENAI_API_KEY") || ""
     });
-    const startTime = performance.now();
-    // Parse and validate the request
-    const requestData = await req.json();
+
+  let requestData;
+  let documentId = null;
+  try {
+    requestData = await req.json();
     validateRequest(requestData);
-    const { documentId, documentText, documentType, documentTitle } = requestData;
+    documentId = requestData.documentId;
+  } catch (e) {
+    console.error("Request validation error:", e);
+    return new Response(JSON.stringify({
+      success: false,
+      error: e.message || "Invalid request"
+    }), {
+      status: 400,
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "application/json"
+      }
+    });
+  }
+
+  try {
+    const { documentText, documentType, documentTitle, documentImage } = requestData;
     // Start the processing
     await supabaseClient.from("documents").update({
       processing_status: "processing",
@@ -69,23 +87,122 @@ serve(async (req)=>{
       console.error("Error logging request:", logError);
     }
     const logId = logData?.id;
-    // Let's simulate document text if none provided (for real implementation, you'd extract text from files)
-    if (!documentText || documentText.trim().length < 20) {
+
+    let text = documentText;
+    // If no valid text, but image is present, use GPT-4o Vision API
+    if ((!text || text.trim().length < 20) && documentImage) {
+      try {
+        console.log('Starting image processing with URL:', documentImage);
+
+        // 1. First verify the image URL is accessible
+        try {
+          const urlTest = await fetch(documentImage);
+          console.log('URL test status:', urlTest.status);
+          
+          if (!urlTest.ok) {
+            throw new Error(`Image URL not accessible: ${urlTest.status}`);
+          }
+          
+          // Check content type
+          const contentType = urlTest.headers.get('content-type');
+          console.log('Image content type:', contentType);
+          
+          if (!contentType?.startsWith('image/')) {
+            throw new Error(`Invalid content type: ${contentType}`);
+          }
+        } catch (urlError) {
+          console.error('URL verification failed:', urlError);
+          throw new Error(`Image URL verification failed: ${urlError.message}`);
+        }
+
+        // 2. Call GPT-4o with the image
+        console.log("About to call GPT-4o with image URL:", documentImage);
+        console.log("Payload to OpenAI:", JSON.stringify([
+          {
+            type: "image_url",
+            image_url: { url: documentImage }
+          }
+        ], null, 2));
+        const visionResponse = await openai.chat.completions.create({
+          model: "gpt-4-vision-preview",
+          messages: [
+            {
+              role: "system",
+              content: "You are a medical document analyzer specialized in extracting information from medical reports, lab results, and clinical images. Extract all relevant medical information including test results, reference ranges, diagnoses, and recommendations. Format numeric values and units consistently."
+            },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "image_url",
+                  image_url: {
+                    url: documentImage
+                  }
+                },
+                {
+                  type: "text",
+                  text: "Please analyze this medical document and extract all relevant information. Include test results with values and reference ranges if present. Structure the information clearly."
+                }
+              ]
+            }
+          ],
+          max_tokens: 4096
+        });
+
+        console.log("GPT-4o raw response:", JSON.stringify(visionResponse, null, 2));
+
+        const content = visionResponse?.choices?.[0]?.message?.content;
+        if (!content) {
+          throw new Error("Empty response from GPT-4o");
+        }
+
+        console.log('GPT-4o content:', content);
+
+        // 3. Try to parse the response
+        try {
+          // First attempt to parse as JSON
+          const parsedContent = JSON.parse(content);
+          text = JSON.stringify(parsedContent);
+          console.log('Successfully parsed GPT response as JSON');
+        } catch (parseError) {
+          // If not JSON, use the raw text
+          console.log('Response is not JSON, using raw text');
+          text = content;
+        }
+
+        // 4. Validate the extracted text
+        if (!text || text.trim().length < 20) {
+          console.error('Extracted text too short:', text);
+          throw new Error("Insufficient text extracted from image");
+        }
+
+        console.log('Successfully extracted text from image:', text.substring(0, 100) + '...');
+
+      } catch (visionError) {
+        console.error('Vision processing error:', visionError);
+        throw new Error(`Image processing failed: ${visionError.message}`);
+      }
+    }
+    // If still no valid text, throw error
+    if (!text || text.trim().length < 20) {
       throw new Error("Could not extract text from the uploaded document. Please upload a valid medical report PDF or image.");
     }
-    const text = documentText;
     // Call OpenAI to analyze the document
     let response;
+    let prePrompt = "";
+    if (documentType && documentType.toLowerCase().includes("image")) {
+      prePrompt = `The following text was extracted from an image (possibly a photo or scan of a medical report). The text may be noisy or unstructured. If you detect tabular or list-like data (such as lab results), do your best to reconstruct the table and extract each row as a key finding. If the image is a narrative report, extract diagnoses, medications, symptoms, and other findings as usual.\n\n`;
+    }
     try {
       response = await openai.chat.completions.create({
         model: "gpt-4",
       messages: [
         {
           role: "system",
-            content: `You are a medical document analyzer capable of processing any type of medical document in any language. Your tasks are:
+            content: `${prePrompt}You are a medical document analyzer capable of processing any type of medical document in any language. Your tasks are:
 
 1. If the document is not in English, first translate it to English (do not include the translation in your response).
-2. Analyze the (translated) document and extract as much structured information as possible, even if the document is narrative or not in a standard format.
+2. Analyze the (translated) document and extract as much structured information as possible, even if the document is narrative, tabular, or not in a standard format.
 3. Always return your response in English, in the following JSON format:
 {
   "summary": "Brief 2-3 sentence overview of the document",
@@ -118,12 +235,37 @@ serve(async (req)=>{
 - Do NOT include the translation in your response, only the analysis in English.
 - If the document is corrupted or unreadable, respond with a summary explaining that no meaningful information could be extracted.
 - **Never leave key_findings empty for a medical document. If explicit findings are not present, INFER or SUMMARIZE likely diagnoses, medications, symptoms, or other findings based on the content. Always provide at least 2-3 key findings, even if they must be inferred from the context.**
-- **EXAMPLES for narrative:**
+- **If the input is a noisy or unstructured OCR extraction from an image (including non-English text), do your best to:**
+  - Translate all medical terms and values to English.
+  - Reconstruct tables or lists of findings.
+  - For each lab result or finding, create a key finding with:
+    - marker: The test name (translated to English, e.g., 'ΕΡΥΘΡΑ ΑΙΜΟΣΦΑΙΡΙΑ (RBC)' → 'Red Blood Cells (RBC)')
+    - value: The measured value and units (e.g., '4.81 10^6/μl')
+    - reference_range: The normal/reference range (e.g., '3.60 - 5.50')
+    - interpretation: 'High', 'Low', or 'Normal' based on the value and reference range
+    - category: 'Lab Result'
+
+EXAMPLE (for a Greek lab report row):
+OCR: 'ΕΡΥΘΡΑ ΑΙΜΟΣΦΑΙΡΙΑ (RBC)   4.81   10^6/μl   3.60 - 5.50'
+JSON:
+{
+  "marker": "Red Blood Cells (RBC)",
+  "value": "4.81 10^6/μl",
+  "reference_range": "3.60 - 5.50",
+  "interpretation": "Normal",
+  "category": "Lab Result"
+}
+
+- If the document is not in English, always translate all findings and the summary to English.
+- If the OCR is messy, do your best to infer the correct columns and values.
+- **Never leave key_findings empty for a medical document.**
+- **If the input is a noisy or unstructured OCR extraction from an image, do your best to reconstruct the table or list of findings. For each lab result or finding, create a key finding as in the example. If you see lines like 'LEUKOCYTES, BLOOD 11.0 x10^9/L H 4.0-10.0', parse them as marker, value, interpretation, and reference range.**
+- **EXAMPLES for narrative and tabular data:**
   - marker: "Diagnosis", value: "Colitis Ulcerosa", category: "Diagnosis"
   - marker: "Medication", value: "Prednisone 10mg daily", category: "Medication"
   - marker: "Symptom", value: "Dyspnoea", category: "Symptom"
-  - marker: "Allergy", value: "Penicillin", category: "Allergy"
-  - marker: "Lab Result", value: "Hemoglobin 12.5 g/dL", reference_range: "13-17 g/dL", interpretation: "Low", category: "Lab Result"`
+  - marker: "Lab Result", value: "Leukocytes 11.0 x10^9/L", reference_range: "4.0-10.0", interpretation: "High", category: "Lab Result"
+  - marker: "Lab Result", value: "Hemoglobin 150 g/L", reference_range: "135-175", interpretation: "Normal", category: "Lab Result"`
         },
         {
           role: "user",
@@ -152,23 +294,14 @@ serve(async (req)=>{
         // Try to parse the content directly first
         analysis = JSON.parse(content.trim());
       } catch (jsonError) {
-        // If direct parsing fails, try to clean the content first
-        console.error("Initial JSON Parse Error:", jsonError);
-        // Remove any potential markdown formatting or extra text
-        const cleanJson = content
-          .replace(/```json\n?|\n?```/g, '')
-          .replace(/^[\s\n]*{/, '{')
-          .replace(/}[\s\n]*$/, '}')
-          .trim();
-        
-        try {
-      analysis = JSON.parse(cleanJson);
-        } catch (secondJsonError) {
-          console.error("JSON Parse Error after cleaning:", secondJsonError);
-          console.error("Raw content:", content);
-          console.error("Cleaned content:", cleanJson);
-          throw new Error(`Invalid JSON response from OpenAI: ${secondJsonError.message}`);
-        }
+        // If not JSON, treat the whole content as summary
+        analysis = {
+          summary: content,
+          key_findings: [],
+          recommendations: [],
+          critical_values: [],
+          metadata: {}
+        };
       }
 
       // Validate the response structure
@@ -313,43 +446,30 @@ Return ONLY a JSON array of findings, e.g.:
       status: 200
     });
   } catch (error) {
-    console.error("Error processing document:", error);
-    // Enhanced error handling
-    const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
-    const errorStatus = error instanceof Error && error.message.includes("required") ? 400 : 500;
-    // Try to extract document ID from request for error logging
-    let documentId = null;
-    try {
-      const requestData = await req.clone().json();
-      documentId = requestData.documentId;
-    } catch (e) {
-      console.error("Could not parse request for error logging:", e);
-    }
-    // Update document status if we have the ID
+    console.error('Full error details:', error);
+    
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : 'Unknown error occurred';
+    
+    const errorStatus = error instanceof Error && error.message.includes('not accessible') 
+      ? 400 
+      : 500;
+
+    // Update document status with detailed error
     if (documentId) {
-      const supabaseClient = createClient(Deno.env.get("SUPABASE_URL") || "", Deno.env.get("SUPABASE_ANON_KEY") || "", {
-        global: {
-          headers: {
-            Authorization: req.headers.get("Authorization") || ""
-          }
-        }
-      });
       await supabaseClient.from("documents").update({
         processing_status: "error",
         status: "Error",
-        error_message: errorMessage
+        error_message: `Processing failed: ${errorMessage}`
       }).eq("id", documentId);
-      await supabaseClient.from("document_processing_logs").update({
-        status: "error",
-        error_message: errorMessage
-      }).eq("document_id", documentId).order("created_at", {
-        ascending: false
-      }).limit(1);
     }
+
     return new Response(JSON.stringify({
       success: false,
       error: errorMessage,
-      status: errorStatus
+      status: errorStatus,
+      details: error instanceof Error ? error.stack : undefined
     }), {
       status: errorStatus,
       headers: {

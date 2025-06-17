@@ -3,7 +3,7 @@ import DashboardHeader from "@/components/DashboardHeader";
 import MobileMenu from "@/components/MobileMenu";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { FileText, Plus, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -18,6 +18,7 @@ const Documents = () => {
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const { documents, isLoading, error, refetchDocuments } = useDocuments();
   const { user } = useAuth();
+  const navigate = useNavigate();
 
   return (
     <div className="flex min-h-screen">
@@ -72,9 +73,12 @@ const Documents = () => {
           <DialogHeader>
             <DialogTitle>Upload Medical Document</DialogTitle>
           </DialogHeader>
-          <UploadDialog onClose={() => setUploadDialogOpen(false)} onUploadComplete={() => {
+          <UploadDialog onClose={() => setUploadDialogOpen(false)} onUploadComplete={(newDocId) => {
             setUploadDialogOpen(false);
             refetchDocuments();
+            if (newDocId) {
+              navigate(`/dashboard/documents/${newDocId}`);
+            }
           }} />
         </DialogContent>
       </Dialog>

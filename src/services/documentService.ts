@@ -165,7 +165,7 @@ export const documentService = {
     const fileName = `${Math.random().toString(36).substring(2, 15)}_${documentData.file.name}`;
     const filePath = `${(await supabase.auth.getUser()).data.user?.id}/${fileName}`;
 
-    const { error: uploadError } = await supabase.storage
+    const { data: uploadData, error: uploadError } = await supabase.storage
       .from("documents")
       .upload(filePath, documentData.file);
 
@@ -174,14 +174,49 @@ export const documentService = {
       throw new Error(uploadError.message);
     }
 
-    // Then create a record in the documents table
+    // Get the public URL
+    const { data: urlData } = supabase.storage
+      .from("documents")
+      .getPublicUrl(uploadData.path);
+
+    if (!urlData?.publicUrl) {
+      throw new Error("Failed to get public URL for uploaded file");
+    }
+
+    console.log('Generated public URL:', urlData.publicUrl);
+
+    // Wait until the image is available (max 10 tries, 1 second each)
+    let available = false;
+    for (let i = 0; i < 10; i++) {
+      try {
+        const resp = await fetch(urlData.publicUrl, { method: 'HEAD' });
+        if (resp.ok) {
+          const contentType = resp.headers.get('content-type');
+          console.log(`File is accessible (attempt ${i + 1}):`, {
+            status: resp.status,
+            contentType
+          });
+          available = true;
+          break;
+        }
+      } catch (error) {
+        console.log(`Attempt ${i + 1} failed:`, error);
+      }
+      await new Promise(res => setTimeout(res, 1000)); // wait 1s
+    }
+
+    if (!available) {
+      throw new Error("File not available at public URL after upload. Please try again.");
+    }
+
+    // Create document record
     const { data: document, error: insertError } = await supabase
       .from("documents")
       .insert({
         title: documentData.title,
         type: documentData.type,
-        file_path: filePath,
-        status: "Processing", // Initial status
+        file_path: uploadData.path,
+        status: "Processing",
         processing_status: "pending",
         user_id: (await supabase.auth.getUser()).data.user?.id,
       })
@@ -209,53 +244,6 @@ export const documentService = {
     type: string, 
     file?: File
   ): Promise<void> {
-    let documentText = "";
-    
-    if (file) {
-      try {
-        if (file.type === 'application/pdf') {
-          // Convert File to ArrayBuffer
-          const arrayBuffer = await file.arrayBuffer();
-          
-          // Load the PDF document
-          const pdf = await getDocument({ data: arrayBuffer }).promise;
-          
-          // Extract text from all pages
-          const numPages = pdf.numPages;
-          const textPromises = [];
-          
-          for (let i = 1; i <= numPages; i++) {
-            const page = await pdf.getPage(i);
-            const textContent = await page.getTextContent();
-            const pageText = textContent.items
-              .map((item: any) => item.str)
-              .join(' ');
-            textPromises.push(pageText);
-          }
-          
-          documentText = (await Promise.all(textPromises)).join('\n\n');
-        } else if (file.type.startsWith('image/')) {
-          // Convert File to base64
-          const base64 = await new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.readAsDataURL(file);
-          });
-          
-          // Use Tesseract.js for OCR
-          const result = await Tesseract.recognize(
-            base64,
-            'eng',
-            { logger: m => console.log(m) }
-          );
-          documentText = result.data.text;
-        }
-      } catch (error) {
-        console.error("Error extracting text:", error);
-        documentText = `Medical information related to ${title}`;
-      }
-    }
-
     try {
       // Update document status to processing
       const { error: updateError } = await supabase
@@ -275,6 +263,71 @@ export const documentService = {
         throw new Error("User is not authenticated");
       }
 
+      // Get the document to get its file path
+      const { data: document, error: docError } = await supabase
+        .from("documents")
+        .select("file_path")
+        .eq("id", documentId)
+        .single();
+
+      if (docError || !document?.file_path) {
+        throw new Error("Could not find document file path");
+      }
+
+      // Construct the file URL
+      const fileUrl = `${SUPABASE_URL}/storage/v1/object/public/documents/${document.file_path}`;
+      console.log('Constructed file URL:', fileUrl);
+
+      // Verify the file URL is accessible
+      try {
+        const fileCheck = await fetch(fileUrl, { method: 'HEAD' });
+        if (!fileCheck.ok) {
+          throw new Error(`File URL not accessible: ${fileCheck.status}`);
+        }
+        console.log('File URL is accessible:', fileCheck.status, fileCheck.headers.get('content-type'));
+      } catch (error) {
+        console.error('File URL verification failed:', error);
+        throw new Error('Could not access the file URL. Please try again.');
+      }
+
+      // Prepare the request payload
+      const payload: any = {
+        documentId,
+        documentType: file?.type || type,
+        documentTitle: title,
+        documentImage: fileUrl,
+      };
+
+      // For PDFs, we'll also include the extracted text
+      if (file?.type === 'application/pdf') {
+        try {
+          // Convert File to ArrayBuffer
+          const arrayBuffer = await file.arrayBuffer();
+          
+          // Load the PDF document
+          const pdf = await getDocument({ data: arrayBuffer }).promise;
+          
+          // Extract text from all pages
+          const numPages = pdf.numPages;
+          const textPromises = [];
+          
+          for (let i = 1; i <= numPages; i++) {
+            const page = await pdf.getPage(i);
+            const textContent = await page.getTextContent();
+            const pageText = textContent.items
+              .map((item: any) => item.str)
+              .join(' ');
+            textPromises.push(pageText);
+          }
+          
+          const documentText = (await Promise.all(textPromises)).join('\n\n');
+          payload.documentText = documentText;
+        } catch (error) {
+          console.error("Error extracting PDF text:", error);
+          // Continue without text extraction
+        }
+      }
+
       // Call the edge function to process the document
       const response = await fetch(
         `${SUPABASE_URL}/functions/v1/process-medical-document`,
@@ -284,20 +337,31 @@ export const documentService = {
             "Content-Type": "application/json",
             Authorization: `Bearer ${authData.session.access_token}`,
           },
-          body: JSON.stringify({
-            documentId,
-            documentText,
-            documentType: type,
-            documentTitle: title,
-          }),
+          body: JSON.stringify(payload),
         }
       );
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Error processing document");
+      // Log the request payload for debugging
+      console.log('Request payload:', payload);
+
+      // Log the response for debugging
+      const responseText = await response.text();
+      console.log('Raw response:', responseText);
+      
+      let result;
+      try {
+        result = JSON.parse(responseText);
+      } catch (e) {
+        console.error('Failed to parse response:', e);
+        throw new Error('Invalid response from server');
       }
 
+      if (!response.ok) {
+        console.error('Processing error:', result);
+        throw new Error(result.error || "Error processing document");
+      }
+
+      console.log('Processing success:', result);
       return;
     } catch (error) {
       // Update document status to error

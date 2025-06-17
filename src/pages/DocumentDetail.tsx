@@ -18,9 +18,17 @@ const DocumentDetail = () => {
   const { id = "" } = useParams<{ id: string }>();
   const { document: doc, isLoading, error, refetchDocument } = useDocumentDetail(id);
   const [isProcessing, setIsProcessing] = useState(false);
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const { subscription, isLoading: isLoadingSubscription, hasActiveAccess } = useSubscription();
   const [fileUrl, setFileUrl] = useState<string | null>(null);
+
+  const formattedDate = doc?.date
+    ? new Date(doc.date).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      })
+    : "Unknown date";
 
   // Add logging
   useEffect(() => {
@@ -40,16 +48,37 @@ const DocumentDetail = () => {
     });
   }, [id, doc, isLoading, error, isProcessing]);
 
+  // Add logging for document state and status
+  useEffect(() => {
+    console.log("Document detail loaded:", doc);
+    if (doc) {
+      console.log("Processing status:", doc.processing_status, "Status:", doc.status);
+      console.log("Document URL:", fileUrl);
+      if (doc.error_message) {
+        console.log("Error message:", doc.error_message);
+      }
+      if (doc.summary) {
+        console.log("Summary length:", doc.summary.length);
+        console.log("First 100 chars of summary:", doc.summary.substring(0, 100));
+      }
+    }
+  }, [doc, fileUrl]);
+
   // Poll for document updates if it's still processing
   useEffect(() => {
     if (doc?.processing_status === "processing" || doc?.status === "Processing") {
+      console.log("Document is processing, setting up polling...");
       setIsProcessing(true);
       const interval = setInterval(() => {
+        console.log("Polling for updates...");
         refetchDocument();
-      }, 5000); // Poll every 5 seconds
-      
-      return () => clearInterval(interval);
+      }, 5000);
+      return () => {
+        console.log("Clearing polling interval");
+        clearInterval(interval);
+      };
     } else {
+      console.log("Document is no longer processing");
       setIsProcessing(false);
     }
   }, [doc, refetchDocument]);
@@ -57,12 +86,14 @@ const DocumentDetail = () => {
   // Show toast when processing completes
   useEffect(() => {
     if (doc?.processing_status === "completed" && isProcessing) {
+      console.log("Processing completed successfully");
       setIsProcessing(false);
       toast({
         title: "Document Ready",
         description: "Your document has been analyzed successfully.",
       });
     } else if (doc?.processing_status === "error" && isProcessing) {
+      console.log("Processing failed with error:", doc.error_message);
       setIsProcessing(false);
       toast({
         title: "Processing Error",
@@ -72,22 +103,58 @@ const DocumentDetail = () => {
     }
   }, [doc, isProcessing]);
 
+  // Add logging
+  useEffect(() => {
+    if (doc) {
+      console.log("Document Processing Details:", {
+        id: doc.id,
+        status: doc.status,
+        processing_status: doc.processing_status,
+        error_message: doc.error_message,
+        file_path: doc.file_path,
+        type: doc.type,
+        fileUrl: fileUrl
+      });
+    }
+  }, [doc, fileUrl]);
+
   // Generate public or signed URL for the original file
   useEffect(() => {
     const getFileUrl = async () => {
       if (doc && 'file_path' in doc && doc.file_path) {
-        // Try to get a public URL first
-        const publicResult = supabase.storage.from('documents').getPublicUrl(doc.file_path);
-        if (publicResult.data?.publicUrl) {
-          setFileUrl(publicResult.data.publicUrl);
-        } else {
-          // If the bucket is private, try to get a signed URL
+        try {
+          // Try to get a public URL first
+          const publicResult = supabase.storage.from('documents').getPublicUrl(doc.file_path);
+          console.log('Public URL result:', publicResult);
+          
+          if (publicResult.data?.publicUrl) {
+            // Verify the URL is accessible
+            try {
+              const response = await fetch(publicResult.data.publicUrl, { method: 'HEAD' });
+              console.log('URL check response:', response.status, response.headers.get('content-type'));
+              if (response.ok) {
+                setFileUrl(publicResult.data.publicUrl);
+                return;
+              }
+            } catch (error) {
+              console.error('Error checking public URL:', error);
+            }
+          }
+
+          // If public URL failed, try signed URL
+          console.log('Falling back to signed URL...');
           const signedResult = await supabase.storage.from('documents').createSignedUrl(doc.file_path, 60 * 60);
+          console.log('Signed URL result:', signedResult);
+          
           if (signedResult.data?.signedUrl) {
             setFileUrl(signedResult.data.signedUrl);
           } else {
+            console.error('Could not get signed URL:', signedResult.error);
             setFileUrl(null);
           }
+        } catch (error) {
+          console.error('Error getting file URL:', error);
+          setFileUrl(null);
         }
       } else {
         setFileUrl(null);
@@ -153,7 +220,7 @@ const DocumentDetail = () => {
         pdf.setFontSize(10);
         
         // Value
-        const valueText = `Value: ${finding.value || finding.explanation}`;
+        const valueText = `Value: ${finding.value}`;
         pdf.text(valueText, leftMargin + 5, y);
         y += 6;
 
@@ -248,66 +315,96 @@ const DocumentDetail = () => {
     return y;
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex min-h-screen">
-        <Sidebar />
-        
-        <div className="flex-1 flex flex-col md:ml-64">
-          <DashboardHeader />
-          <MobileMenu />
-          
-          <main className="flex-1 p-6 md:p-8 overflow-y-auto dashboard-gradient">
-            <div className="max-w-4xl mx-auto">
-              <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <Link to="/dashboard/documents" className="text-muted-foreground hover:text-foreground">
-                      Documents
-                    </Link>
-                    <span className="text-muted-foreground">/</span>
-                    <Skeleton className="h-6 w-32" />
-                  </div>
-                  <Skeleton className="h-9 w-64 mt-2" />
-                  <Skeleton className="h-5 w-24 mt-2" />
-                </div>
-              </div>
-              
-              <Card className="mb-6 md:mb-8">
-                <CardHeader>
-                  <CardTitle>Summary</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Skeleton className="h-6 w-full" />
-                  <Skeleton className="h-6 w-full mt-2" />
-                  <Skeleton className="h-5 w-24 mt-2" />
-                </CardContent>
-              </Card>
-              
-              <Card className="mb-6 md:mb-8">
-                <CardHeader>
-                  <CardTitle>Key Findings</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-6">
-                    {[...Array(3)].map((_, i) => (
-                      <div key={i} className="border-b border-border pb-6 last:border-0 last:pb-0">
-                        <Skeleton className="h-6 w-48 mb-2" />
-                        <Skeleton className="h-4 w-full" />
-                        <Skeleton className="h-4 w-5/6 mt-1" />
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </main>
-        </div>
-      </div>
-    );
-  }
+  const processDocument = async (file: File) => {
+    try {
+      // First upload to Supabase Storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('documents')
+        .upload(`${Date.now()}-${file.name}`, file);
 
-  // Handle document not found or error states
+      if (uploadError) throw uploadError;
+
+      // Get the public URL
+      const { data: urlData } = supabase.storage
+        .from('documents')
+        .getPublicUrl(uploadData.path);
+
+      console.log('Generated public URL:', urlData.publicUrl); // Debug log
+
+      // Wait until the image is available (max 5 tries)
+      let available = false;
+      for (let i = 0; i < 5; i++) {
+        const resp = await fetch(urlData.publicUrl, { method: 'HEAD' });
+        if (resp.ok) {
+          available = true;
+          break;
+        }
+        await new Promise(res => setTimeout(res, 1000)); // wait 1s
+      }
+      if (!available) {
+        throw new Error("Image not available at public URL after upload.");
+      }
+
+      // Create document record
+      const { data: docData, error: docError } = await supabase
+        .from('documents')
+        .insert({
+          title: file.name,
+          file_path: uploadData.path,
+          type: file.type,
+          status: 'Pending',
+          processing_status: 'pending',
+          user_id: user.id
+        })
+        .select()
+        .single();
+
+      if (docError) throw docError;
+
+      console.log('Payload sent to backend:', {
+        documentId: docData.id,
+        documentType: file.type,
+        documentTitle: file.name,
+        documentImage: urlData.publicUrl
+      });
+
+      // Send to Edge Function for processing
+      const response = await fetch('/api/process-medical-document', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify({
+          documentId: docData.id,
+          documentType: file.type,
+          documentTitle: file.name,
+          documentImage: urlData.publicUrl
+        })
+      });
+
+      const result = await response.json();
+      
+      if (!response.ok) {
+        console.error('Processing error:', result);
+        throw new Error(result.error || 'Failed to process document');
+      }
+
+      console.log('Processing success:', result);
+      
+      // Refresh the document details
+      refetchDocument();
+
+    } catch (error) {
+      console.error('Full error:', error);
+      toast({
+        title: "Processing Error",
+        description: error.message || "Failed to process document",
+        variant: "destructive"
+      });
+    }
+  };
+
   if ((error && error !== 'null') || !doc) {
     return (
       <div className="flex min-h-screen">
@@ -346,17 +443,13 @@ const DocumentDetail = () => {
     );
   }
 
-  // Handle document still processing state
-  if (doc.status === "Processing" || doc.processing_status === "processing" || 
-      doc.processing_status === "pending") {
+  if (doc?.processing_status === "error") {
     return (
       <div className="flex min-h-screen">
         <Sidebar />
-        
         <div className="flex-1 flex flex-col md:ml-64">
           <DashboardHeader />
           <MobileMenu />
-          
           <main className="flex-1 p-6 md:p-8 overflow-y-auto dashboard-gradient">
             <div className="max-w-4xl mx-auto">
               <div className="flex items-center mb-8">
@@ -364,7 +457,41 @@ const DocumentDetail = () => {
                   <ArrowLeft className="h-4 w-4 mr-2" /> Back to Documents
                 </Link>
               </div>
-              
+              <Card>
+                <CardContent className="flex flex-col items-center justify-center py-12">
+                  <div className="h-12 w-12 rounded-full bg-red-100 flex items-center justify-center mb-4">
+                    <FileText className="h-6 w-6 text-red-600" />
+                  </div>
+                  <h2 className="text-xl font-medium mb-2">Processing Error</h2>
+                  <p className="text-muted-foreground mb-6">
+                    {doc.error_message || "The document appears to be corrupted or unreadable. No meaningful information could be extracted."}
+                  </p>
+                  <Link to="/dashboard/documents">
+                    <Button>Return to Documents</Button>
+                  </Link>
+                </CardContent>
+              </Card>
+            </div>
+          </main>
+        </div>
+      </div>
+    );
+  }
+
+  if (isLoading || isProcessing || doc?.processing_status === "processing" || doc?.status === "Processing" || doc?.processing_status === "pending") {
+    return (
+      <div className="flex min-h-screen">
+        <Sidebar />
+        <div className="flex-1 flex flex-col md:ml-64">
+          <DashboardHeader />
+          <MobileMenu />
+          <main className="flex-1 p-6 md:p-8 overflow-y-auto dashboard-gradient">
+            <div className="max-w-4xl mx-auto">
+              <div className="flex items-center mb-8">
+                <Link to="/dashboard/documents" className="flex items-center text-muted-foreground hover:text-foreground">
+                  <ArrowLeft className="h-4 w-4 mr-2" /> Back to Documents
+                </Link>
+              </div>
               <Card>
                 <CardContent className="flex flex-col items-center justify-center py-12">
                   <div className="h-12 w-12 rounded-full bg-amber-100 flex items-center justify-center mb-4">
@@ -377,6 +504,176 @@ const DocumentDetail = () => {
                   <p className="text-sm text-muted-foreground mb-2">
                     This page will automatically update when processing is complete.
                   </p>
+                </CardContent>
+              </Card>
+            </div>
+          </main>
+        </div>
+      </div>
+    );
+  }
+
+  if (doc?.processing_status === "completed") {
+    return (
+      <div className="flex min-h-screen">
+        <Sidebar />
+        
+        <div className="flex-1 flex flex-col md:ml-64">
+          <DashboardHeader />
+          <MobileMenu />
+          
+          <main className="flex-1 p-6 md:p-8 overflow-y-auto dashboard-gradient">
+            <div className="max-w-4xl mx-auto">
+              <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Link to="/dashboard/documents" className="text-muted-foreground hover:text-foreground">
+                      Documents
+                    </Link>
+                    <span className="text-muted-foreground">/</span>
+                    <span className="truncate">{doc.title}</span>
+                  </div>
+                  <h1 className="text-2xl md:text-3xl font-medium mt-2 break-words">{doc.title}</h1>
+                  <p className="text-muted-foreground">{formattedDate}</p>
+                </div>
+                
+                <div className="flex flex-wrap items-center gap-3">
+                  <a href={fileUrl} target="_blank" rel="noopener noreferrer">
+                    <Button>View Original</Button>
+                  </a>
+                  <Button
+                    className="bg-second hover:bg-second-dark text-dark w-full sm:w-auto"
+                    onClick={handleDownloadReport}
+                  >
+                    <ArrowDown className="h-4 w-4 mr-2" /> Download Report
+                  </Button>
+                </div>
+              </div>
+              
+              <Card className="mb-6 md:mb-8">
+                <CardHeader>
+                  <CardTitle>Document Information</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {doc.metadata?.patient_info && (
+                      <div>
+                        <h3 className="text-sm font-medium mb-1">Provider Information</h3>
+                        <div className="text-sm text-muted-foreground space-y-1">
+                          {doc.metadata.patient_info.provider && (
+                            <p>Provider: {doc.metadata.patient_info.provider}</p>
+                          )}
+                          {doc.metadata.patient_info.facility && (
+                            <p>Facility: {doc.metadata.patient_info.facility}</p>
+                          )}
+                          {doc.metadata.patient_info.date && (
+                            <p>Document Date: {doc.metadata.patient_info.date}</p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+              
+              <Card className="mb-6 md:mb-8">
+                <CardHeader>
+                  <CardTitle>Summary</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p>{doc.summary || "No summary available."}</p>
+                </CardContent>
+              </Card>
+              
+              <Card className="mb-6 md:mb-8">
+                <CardHeader>
+                  <CardTitle>Key Findings</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {doc.key_findings && doc.key_findings.length > 0 ? (
+                    <div className="space-y-8">
+                      {/* Group findings by category */}
+                      {Object.entries(
+                        doc.key_findings.reduce((acc, finding) => {
+                          const category = finding.category || "Other Findings";
+                          if (!acc[category]) {
+                            acc[category] = [];
+                          }
+                          acc[category].push(finding);
+                          return acc;
+                        }, {} as Record<string, typeof doc.key_findings>)
+                      ).map(([category, findings]) => (
+                        <div key={category} className="space-y-4">
+                          <h3 className="text-lg font-medium border-b pb-2">{category}</h3>
+                          <div className="space-y-6">
+                            {findings.map((finding, index) => (
+                              <div key={index} className="border-b border-border pb-4 last:border-0 last:pb-0">
+                                <h4 className="font-medium mb-2">{finding.marker}</h4>
+                                <div className="space-y-2">
+                                  <div className="flex flex-col space-y-1">
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-sm font-medium">Value:</span>
+                                      <span className="text-sm">{finding.value}</span>
+                                    </div>
+                                    {finding.reference_range && (
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-sm font-medium">Reference Range:</span>
+                                        <span className="text-sm">{finding.reference_range}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                  {finding.interpretation && (
+                                    <p className="text-sm text-muted-foreground">{finding.interpretation}</p>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground">No findings available.</p>
+                  )}
+                </CardContent>
+              </Card>
+
+              {doc.critical_values && doc.critical_values.length > 0 && (
+                <Card className="mb-6 md:mb-8">
+                  <CardHeader>
+                    <CardTitle>Critical Values</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ul className="list-disc pl-5 space-y-2 text-red-600">
+                      {doc.critical_values.map((value, index) => (
+                        <li key={index}>{value}</li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                </Card>
+              )}
+              
+              <Card>
+                <CardHeader>
+                  <CardTitle>Recommendations</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {doc.recommendations && doc.recommendations.length > 0 ? (
+                    <ul className="list-disc pl-5 space-y-2">
+                      {doc.recommendations.map((recommendation, index) => (
+                        <li key={index}>{recommendation}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-muted-foreground">No recommendations available.</p>
+                  )}
+                  
+                  <div className="mt-6 pt-6 border-t border-border text-sm text-muted-foreground">
+                    <p>
+                      This analysis is provided for educational purposes only and does not constitute medical advice. 
+                      Always consult with a healthcare provider for proper diagnosis and treatment.
+                    </p>
+                  </div>
                 </CardContent>
               </Card>
             </div>
@@ -409,14 +706,6 @@ const DocumentDetail = () => {
       </div>
     );
   }
-
-  const formattedDate = doc.date
-    ? new Date(doc.date).toLocaleDateString('en-US', { 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
-      })
-    : "Unknown date";
 
   return (
     <div className="flex min-h-screen">
@@ -509,7 +798,7 @@ const DocumentDetail = () => {
                     ).map(([category, findings]) => (
                       <div key={category} className="space-y-4">
                         <h3 className="text-lg font-medium border-b pb-2">{category}</h3>
-                  <div className="space-y-6">
+                        <div className="space-y-6">
                           {findings.map((finding, index) => (
                             <div key={index} className="border-b border-border pb-4 last:border-0 last:pb-0">
                               <h4 className="font-medium mb-2">{finding.marker}</h4>
@@ -517,7 +806,7 @@ const DocumentDetail = () => {
                                 <div className="flex flex-col space-y-1">
                                   <div className="flex items-center justify-between">
                                     <span className="text-sm font-medium">Value:</span>
-                                    <span className="text-sm">{finding.value || finding.explanation}</span>
+                                    <span className="text-sm">{finding.value}</span>
                                   </div>
                                   {finding.reference_range && (
                                     <div className="flex items-center justify-between">
