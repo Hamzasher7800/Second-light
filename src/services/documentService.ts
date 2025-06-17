@@ -322,7 +322,7 @@ export const documentService = {
           
           const documentText = (await Promise.all(textPromises)).join('\n\n');
           payload.documentText = documentText;
-        } catch (error) {
+      } catch (error) {
           console.error("Error extracting PDF text:", error);
           // Continue without text extraction
         }

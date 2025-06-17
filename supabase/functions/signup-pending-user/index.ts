@@ -30,9 +30,6 @@ serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
   try {
-    // Log request headers for debugging
-    console.log("Request headers:", Object.fromEntries(req.headers.entries()));
-
     const { email, password } = await req.json();
     if (!email || !password) {
       return new Response("Email and password required", {
@@ -40,58 +37,34 @@ serve(async (req) => {
         headers: corsHeaders
       });
     }
-
-    // Check environment variables
-    if (!SENDGRID_API_KEY) {
-      console.error("Missing SENDGRID_API_KEY");
-      return new Response("Server misconfiguration: Missing SendGrid API key", {
+    if (!SENDGRID_API_KEY || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !ENCRYPTION_SECRET) {
+      return new Response("Server misconfiguration", {
         status: 500,
         headers: corsHeaders
       });
     }
-    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !ENCRYPTION_SECRET) {
-      console.error("Missing required environment variables");
-      return new Response("Server misconfiguration: Missing required environment variables", {
-        status: 500,
-        headers: corsHeaders
-      });
-    }
-
-    console.log("Creating Supabase client...");
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // Check if pending user exists
-    console.log("Checking for existing user...");
     const { data: existing, error: existingError } = await supabase
       .from("pending_users")
       .select("*")
       .eq("email", email)
       .single();
 
-    if (existingError && existingError.code !== "PGRST116") {
-      console.error("Error checking existing user:", existingError);
-      return new Response(`Database error: ${existingError.message}`, {
-        status: 500,
-        headers: corsHeaders
-      });
-    }
-
     let userId: string;
     let resend = false;
 
-    console.log("Encrypting password...");
     const encryptedPassword = await encrypt(password, ENCRYPTION_SECRET);
 
     if (existing && !existing.is_verified) {
-      console.log("Updating existing unverified user...");
       // Update encrypted password and resend verification
       const { error: updateError } = await supabase
         .from("pending_users")
         .update({ encrypted_password: encryptedPassword })
         .eq("email", email);
       if (updateError) {
-        console.error("Error updating user:", updateError);
-        return new Response(`Database error: ${updateError.message}`, {
+        return new Response(updateError.message, {
           status: 500,
           headers: corsHeaders
         });
@@ -104,7 +77,6 @@ serve(async (req) => {
         headers: corsHeaders
       });
     } else {
-      console.log("Creating new pending user...");
       // Create new pending user
       const { data: user, error: userError } = await supabase
         .from("pending_users")
@@ -116,8 +88,7 @@ serve(async (req) => {
         .select()
         .single();
       if (userError) {
-        console.error("Error creating user:", userError);
-        return new Response(`Database error: ${userError.message}`, {
+        return new Response(userError.message, {
           status: 400,
           headers: corsHeaders
         });
@@ -126,35 +97,20 @@ serve(async (req) => {
     }
 
     // Generate new token
-    console.log("Generating verification token...");
     const token = crypto.randomUUID();
     const expires_at = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hour
 
-    // Insert new token
-    console.log("Storing verification token...");
-    const { error: tokenError } = await supabase.from("email_verification_tokens").insert({
+    // Insert new token (optionally, you can mark old tokens as used)
+    await supabase.from("email_verification_tokens").insert({
       user_id: userId,
       token,
       expires_at,
       used: false
     });
 
-    if (tokenError) {
-      console.error("Error storing token:", tokenError);
-      return new Response(`Database error: ${tokenError.message}`, {
-        status: 500,
-        headers: corsHeaders
-      });
-    }
-
     // Send email via SendGrid
-    console.log("Preparing to send verification email...");
     const BASE_URL = Deno.env.get("BASE_URL") || "https://second-light-ai.netlify.app";
-    const verificationUrl = `${BASE_URL}/auth/verify-email?token=${token}`;
-    
-    console.log("Sending verification email to:", email);
-    console.log("Verification URL:", verificationUrl);
-    
+    const verificationUrl = `${BASE_URL}/verify-email?token=${token}`;
     const sendgridRes = await fetch("https://api.sendgrid.com/v3/mail/send", {
       method: "POST",
       headers: {
@@ -165,7 +121,7 @@ serve(async (req) => {
         personalizations: [
           {
             to: [{ email }],
-            subject: "Verify your Second Light account"
+            subject: "Verify your email"
           }
         ],
         from: {
@@ -175,21 +131,7 @@ serve(async (req) => {
         content: [
           {
             type: "text/html",
-            value: `
-              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <h2 style="color: #333;">Welcome to Second Light!</h2>
-                <p>Thank you for signing up. Please verify your email address to complete your registration.</p>
-                <p style="margin: 20px 0;">
-                  <a href="${verificationUrl}" 
-                     style="background-color: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">
-                    Verify Email Address
-                  </a>
-                </p>
-                <p style="color: #666; font-size: 14px;">
-                  If you didn't create an account with Second Light, you can safely ignore this email.
-                </p>
-              </div>
-            `
+            value: `<p>Click <a href="${verificationUrl}">here</a> to verify your email.</p>`
           }
         ]
       })
@@ -197,14 +139,12 @@ serve(async (req) => {
 
     if (!sendgridRes.ok) {
       const err = await sendgridRes.text();
-      console.error("SendGrid error:", err);
-      return new Response(`Failed to send verification email: ${err}`, {
+      return new Response(`SendGrid error: ${err}`, {
         status: 500,
         headers: corsHeaders
       });
     }
 
-    console.log("Email sent successfully!");
     return new Response(
       resend
         ? "Verification email resent. Please check your inbox."
@@ -212,8 +152,7 @@ serve(async (req) => {
       { status: 200, headers: corsHeaders }
     );
   } catch (err) {
-    console.error("Unexpected error:", err);
-    return new Response(`Internal server error: ${err instanceof Error ? err.message : String(err)}`, {
+    return new Response("Internal server error", {
       status: 500,
       headers: corsHeaders
     });

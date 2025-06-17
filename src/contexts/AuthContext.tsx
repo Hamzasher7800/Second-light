@@ -4,8 +4,7 @@ import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const SUPABASE_EDGE_URL = "https://qlkkjojkaoniwhgdxelh.supabase.co/functions/v1";
 
 // Add new types for custom signup/verification
 export type AuthContextType = {
@@ -68,25 +67,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Store password temporarily for verification
       localStorage.setItem('temp_password', password);
       
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/signup-pending-user`, {
+      const res = await fetch(`${SUPABASE_EDGE_URL}/signup-pending-user`, {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-          'apikey': SUPABASE_ANON_KEY
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
       });
-
       if (!res.ok) {
         const err = await res.text();
-        console.error('Signup error response:', err);
         throw new Error(err);
       }
-
-      const result = await res.text();
-      console.log('Signup success response:', result);
-
       toast({
         title: "Account created!",
         description: "Please check your email to verify your account.",
@@ -95,7 +84,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error: unknown) {
       // Clear temporary password on error
       localStorage.removeItem('temp_password');
-      console.error('Signup error:', error);
       toast({
         variant: "destructive",
         title: "Error",
@@ -110,32 +98,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function verifyEmailToken(token: string) {
     setIsLoading(true);
     try {
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/verify-email-token`, {
+      const res = await fetch(`${SUPABASE_EDGE_URL}/verify-email-token`, {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-          'apikey': SUPABASE_ANON_KEY
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token })
       });
-
       if (!res.ok) {
         const err = await res.text();
-        console.error('Verification error response:', err);
         throw new Error(err);
       }
-
-      const result = await res.text();
-      console.log('Verification success response:', result);
-
       toast({
         title: "Email verified!",
         description: "You can now log in.",
       });
       navigate('/auth/login');
     } catch (error: unknown) {
-      console.error('Verification error:', error);
       toast({
         variant: "destructive",
         title: "Error",

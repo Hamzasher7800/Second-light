@@ -123,17 +123,17 @@ const DocumentDetail = () => {
     const getFileUrl = async () => {
       if (doc && 'file_path' in doc && doc.file_path) {
         try {
-          // Try to get a public URL first
-          const publicResult = supabase.storage.from('documents').getPublicUrl(doc.file_path);
+        // Try to get a public URL first
+        const publicResult = supabase.storage.from('documents').getPublicUrl(doc.file_path);
           console.log('Public URL result:', publicResult);
           
-          if (publicResult.data?.publicUrl) {
+        if (publicResult.data?.publicUrl) {
             // Verify the URL is accessible
             try {
               const response = await fetch(publicResult.data.publicUrl, { method: 'HEAD' });
               console.log('URL check response:', response.status, response.headers.get('content-type'));
               if (response.ok) {
-                setFileUrl(publicResult.data.publicUrl);
+          setFileUrl(publicResult.data.publicUrl);
                 return;
               }
             } catch (error) {
@@ -419,14 +419,14 @@ const DocumentDetail = () => {
               <div className="flex items-center mb-8">
                 <Link to="/dashboard/documents" className="flex items-center text-muted-foreground hover:text-foreground">
                   <ArrowLeft className="h-4 w-4 mr-2" /> Back to Documents
-                </Link>
+                    </Link>
               </div>
               
               <Card>
                 <CardContent className="flex flex-col items-center justify-center py-12">
                   <div className="h-12 w-12 rounded-full bg-red-100 flex items-center justify-center mb-4">
                     <FileText className="h-6 w-6 text-red-600" />
-                  </div>
+                      </div>
                   <h2 className="text-xl font-medium mb-2">Document Not Found</h2>
                   <p className="text-muted-foreground mb-6">
                     {error || "The document may still be processing or doesn't exist."}
