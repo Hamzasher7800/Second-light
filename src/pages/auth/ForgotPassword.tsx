@@ -112,7 +112,7 @@ export default function ForgotPassword() {
               <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
                 <p className="text-sm text-yellow-800">
                   <strong>Note:</strong> If you encounter issues with the reset email, 
-                  please contact support at support@second-light-ai.com for manual password reset.
+                  please contact support at support@secondlight.ai for manual password reset.
                 </p>
               </div>
             <form onSubmit={handleSubmit} className="space-y-6">

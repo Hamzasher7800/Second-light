@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Link, useNavigate } from "react-router-dom";
 import { FileText, Plus, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import UploadDialog from "@/components/UploadDialog";
 import { useDocuments } from "@/hooks/useDocuments";
@@ -23,13 +23,35 @@ const Documents = () => {
   const navigate = useNavigate();
   const { subscription, hasActiveAccess } = useSubscription();
 
-  const handleUploadClick = () => {
+  // Fetch documents when component mounts or user changes
+  useEffect(() => {
+    if (user) {
+      refetchDocuments();
+    }
+  }, [user, refetchDocuments]);
+
+  // Refetch documents when subscription status changes
+  useEffect(() => {
+    if (subscription) {
+      refetchDocuments();
+    }
+  }, [subscription, refetchDocuments]);
+
+  const handleUploadClick = useCallback(() => {
     if (!hasActiveAccess()) {
       navigate('/dashboard/account');
       return;
     }
     setUploadDialogOpen(true);
-  };
+  }, [hasActiveAccess, navigate]);
+
+  const handleUploadComplete = useCallback(async (newDocId: string | null) => {
+    setUploadDialogOpen(false);
+    await refetchDocuments();
+    if (newDocId) {
+      navigate(`/dashboard/documents/${newDocId}`);
+    }
+  }, [navigate, refetchDocuments]);
 
   return (
     <div className="flex min-h-screen">
@@ -92,7 +114,7 @@ const Documents = () => {
                 ) : documents && documents.length > 0 ? (
                   <div className="space-y-3 sm:space-y-4 md:space-y-6">
                     {documents.map((doc) => (
-                      <DocumentItem key={doc.id} document={doc} />
+                      <DocumentItem key={`${doc.id}-${doc.status}`} document={doc} />
                     ))}
                   </div>
                 ) : (
@@ -109,13 +131,10 @@ const Documents = () => {
           <DialogHeader>
             <DialogTitle>Upload Medical Document</DialogTitle>
           </DialogHeader>
-          <UploadDialog onClose={() => setUploadDialogOpen(false)} onUploadComplete={(newDocId) => {
-            setUploadDialogOpen(false);
-            refetchDocuments();
-            if (newDocId) {
-              navigate(`/dashboard/documents/${newDocId}`);
-            }
-          }} />
+          <UploadDialog 
+            onClose={() => setUploadDialogOpen(false)} 
+            onUploadComplete={handleUploadComplete} 
+          />
         </DialogContent>
       </Dialog>
     </div>

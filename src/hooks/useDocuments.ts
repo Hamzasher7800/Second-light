@@ -12,6 +12,9 @@ export function useDocuments() {
   } = useQuery({
     queryKey: ['documents'],
     queryFn: documentService.getDocuments,
+    gcTime: 5 * 60 * 1000, // Cache for 5 minutes
+    refetchOnMount: true, // Refetch when component mounts
+    refetchOnWindowFocus: true, // Refetch when window regains focus
     meta: {
       onError: (error: Error) => {
         console.error('Error fetching documents:', error);
@@ -48,7 +51,9 @@ export function useDocumentDetail(id: string) {
     queryKey: ['document', id],
     queryFn: () => documentService.getDocumentById(id),
     enabled: !!id,
-    refetchInterval: (data) => {
+    gcTime: 5 * 60 * 1000, // Cache for 5 minutes
+    refetchInterval: (query) => {
+      const data = query.state.data;
       // Automatically poll if document is still processing
       if (data?.processing_status === 'processing' || 
           data?.processing_status === 'pending' ||

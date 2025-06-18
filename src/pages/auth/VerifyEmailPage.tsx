@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 
 export default function VerifyEmailPage() {
   const [status, setStatus] = useState<"verifying" | "success" | "error">("verifying");
@@ -16,42 +17,54 @@ export default function VerifyEmailPage() {
       return;
     }
 
-    // Call your Edge Function to verify the token
-    fetch("https://qlkkjojkaoniwhgdxelh.supabase.co/functions/v1/verify-email-token", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFsa2tqb2prYW9uaXdoZ2R4ZWxoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDY1MjE4NjUsImV4cCI6MjA2MjA5Nzg2NX0.vbR2omz7_PSaiAy5geCmM-NaXnmB6jaCXXac3JXlXjU",
-        "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFsa2tqb2prYW9uaXdoZ2R4ZWxoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDY1MjE4NjUsImV4cCI6MjA2MjA5Nzg2NX0.vbR2omz7_PSaiAy5geCmM-NaXnmB6jaCXXac3JXlXjU"
-      },
-      body: JSON.stringify({ token }),
-    })
-      .then(async (res) => {
-        if (res.ok) {
-          setStatus("success");
-          setMessage("Email verified! Redirecting to login...");
-          // Redirect to login page after 2 seconds
-          setTimeout(() => {
-            navigate("/auth/login");
-          }, 2000);
-        } else {
-          const text = await res.text();
-          setStatus("error");
-          setMessage(text || "Verification failed.");
-        }
-      })
-      .catch(() => {
+    const verifyEmail = async () => {
+      try {
+        const { error } = await supabase.functions.invoke('verify-email-token', {
+          body: { token }
+        });
+
+        if (error) throw error;
+
+        setStatus("success");
+        setMessage("Email verified! Redirecting to login...");
+        toast({
+          title: "Success",
+          description: "Email verified successfully. You can now log in.",
+        });
+        
+        // Redirect to login page after 2 seconds
+        setTimeout(() => {
+          navigate("/auth/login");
+        }, 2000);
+      } catch (error: Error | unknown) {
         setStatus("error");
-        setMessage("Verification failed.");
-      });
+        setMessage(error instanceof Error ? error.message : "Verification failed.");
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: error instanceof Error ? error.message : "Email verification failed. Please try again.",
+        });
+      }
+    };
+
+    verifyEmail();
   }, [navigate]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="bg-white p-8 rounded shadow">
-        {status === "verifying" && <p>Verifying your email...</p>}
-        {status === "success" && <p className="text-green-600">{message}</p>}
-        {status === "error" && <p className="text-red-600">{message}</p>}
+    <div className="min-h-screen flex items-center justify-center landing-gradient">
+      <div className="bg-white p-8 rounded-lg shadow-sm max-w-md w-full mx-4">
+        <div className="text-center">
+          <h1 className="text-2xl font-medium mb-4">Email Verification</h1>
+          {status === "verifying" && (
+            <p className="text-dark-light">Verifying your email address...</p>
+          )}
+          {status === "success" && (
+            <p className="text-green-600 font-medium">{message}</p>
+          )}
+          {status === "error" && (
+            <p className="text-red-600 font-medium">{message}</p>
+          )}
+        </div>
       </div>
     </div>
   );

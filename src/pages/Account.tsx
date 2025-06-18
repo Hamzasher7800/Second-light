@@ -28,7 +28,7 @@ const Account = () => {
         body: { 
           type: 'create-checkout-session', 
           userId: user?.id,
-          domain: 'https://second-light-ai.netlify.app'
+          returnUrl: window.location.origin + '/account'
         }
       });
 
