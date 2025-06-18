@@ -18,6 +18,22 @@ const UploadCard = () => {
   const navigate = useNavigate();
   const { canUploadFile, subscription, isLoading: isLoadingSubscription } = useSubscription();
 
+  // Determine the correct message for upload restriction
+  let restrictionMessage = '';
+  if (!isLoadingSubscription && subscription) {
+    if (subscription.status === 'cancelled') {
+      if (subscription.reportsRemaining > 0) {
+        restrictionMessage = `Your subscription is cancelled. You can still upload documents until your credits run out (${subscription.reportsRemaining} left) or your billing period ends (${new Date(subscription.currentPeriodEnd!).toLocaleDateString()}).`;
+      } else {
+        restrictionMessage = 'Your subscription is cancelled and you have no credits left. Please reactivate to continue uploading.';
+      }
+    } else if (subscription.status !== 'active' && subscription.status !== 'trialing') {
+      restrictionMessage = 'You must have an active subscription to upload documents.';
+    }
+  } else if (!isLoadingSubscription && !subscription) {
+    restrictionMessage = 'You must have an active subscription to upload documents.';
+  }
+
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(true);
@@ -122,7 +138,7 @@ const UploadCard = () => {
     setPendingFile(null);
   };
 
-  if (!isLoadingSubscription && (!subscription || subscription.status !== "active")) {
+  if (!isLoadingSubscription && (!subscription || subscription.status !== "active" && subscription.status !== "trialing" && !(subscription.status === 'cancelled' && subscription.reportsRemaining > 0))) {
     return (
       <Card className="w-full">
         <CardHeader>
@@ -133,7 +149,7 @@ const UploadCard = () => {
         </CardHeader>
         <CardContent>
           <div className="p-6 text-center text-red-600 font-medium">
-            You must have an active subscription to upload documents.
+            {restrictionMessage}
           </div>
         </CardContent>
       </Card>

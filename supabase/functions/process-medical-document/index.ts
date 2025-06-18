@@ -41,7 +41,7 @@ serve(async (req)=>{
       global: {
         headers: {
         Authorization: req.headers.get("Authorization")
-      }
+        }
       }
     });
   // @ts-expect-error Deno global is only available in Deno runtime, not Node

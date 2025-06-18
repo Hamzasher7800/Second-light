@@ -9,10 +9,11 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import * as pdfjsLib from "pdfjs-dist";
 import "pdfjs-dist/build/pdf.worker.entry";
+import { useSubscription } from "@/hooks/useSubscription";
 
 interface UploadDialogProps {
   onClose: () => void;
-  onUploadComplete?: () => void;
+  onUploadComplete?: (newDocId?: string) => void;
 }
 
 const UploadDialog = ({ onClose, onUploadComplete }: UploadDialogProps) => {
@@ -27,6 +28,7 @@ const UploadDialog = ({ onClose, onUploadComplete }: UploadDialogProps) => {
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [pdfError, setPdfError] = useState<string | null>(null);
   const navigate = useNavigate();
+  const { subscription, hasActiveAccess, canUploadFile } = useSubscription();
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -41,6 +43,16 @@ const UploadDialog = ({ onClose, onUploadComplete }: UploadDialogProps) => {
     e.preventDefault();
     setIsDragging(false);
     
+    if (!hasActiveAccess()) {
+      setUploadError("Please subscribe to upload documents");
+      toast.error("Please subscribe to upload documents");
+      return;
+    }
+
+    if (!canUploadFile()) {
+      return;
+    }
+    
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const file = e.dataTransfer.files[0];
       handleFile(file);
@@ -48,6 +60,16 @@ const UploadDialog = ({ onClose, onUploadComplete }: UploadDialogProps) => {
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!hasActiveAccess()) {
+      setUploadError("Please subscribe to upload documents");
+      toast.error("Please subscribe to upload documents");
+      return;
+    }
+
+    if (!canUploadFile()) {
+      return;
+    }
+
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
       handleFile(file);
@@ -115,6 +137,17 @@ const UploadDialog = ({ onClose, onUploadComplete }: UploadDialogProps) => {
 
   const handleUpload = async () => {
     if (!selectedFile) return;
+
+    if (!hasActiveAccess()) {
+      setUploadError("Please subscribe to upload documents");
+      toast.error("Please subscribe to upload documents");
+      return;
+    }
+
+    if (!canUploadFile()) {
+      return;
+    }
+
     try {
       setIsUploading(true);
       setUploadProgress(10);
@@ -155,7 +188,7 @@ const UploadDialog = ({ onClose, onUploadComplete }: UploadDialogProps) => {
       setProcessingMessage("Analyzing document content...");
       toast.success("Document uploaded! Analysis in progress...");
       if (onUploadComplete) {
-        onUploadComplete();
+        onUploadComplete(document.id);
       } else {
         onClose();
       }
@@ -180,6 +213,33 @@ const UploadDialog = ({ onClose, onUploadComplete }: UploadDialogProps) => {
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Error</AlertTitle>
           <AlertDescription>{uploadError}</AlertDescription>
+        </Alert>
+      )}
+      
+      {!hasActiveAccess() && (
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Subscription Required</AlertTitle>
+          <AlertDescription>
+            Please subscribe to upload and analyze documents.
+            <Button
+              variant="link"
+              className="p-0 h-auto font-normal text-primary ml-2"
+              onClick={() => navigate('/dashboard/account')}
+            >
+              Go to subscription page
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {hasActiveAccess() && subscription?.reportsRemaining <= 0 && (
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Monthly Limit Reached</AlertTitle>
+          <AlertDescription>
+            You've reached your monthly report limit. Your limit will reset on {new Date(subscription.nextBillingDate || '').toLocaleDateString()}.
+          </AlertDescription>
         </Alert>
       )}
       

@@ -22,13 +22,18 @@ const Dashboard = () => {
   const hasDocuments = documents && documents.length > 0;
   const { subscription, isLoading: isLoadingSubscription, hasActiveAccess } = useSubscription();
   
+  const reportsUsed = subscription && (subscription.status === 'active' || subscription.status === 'cancelled' || subscription.status === 'trialing')
+    ? 30 - (subscription.reportsRemaining ?? 0)
+    : 0;
+  const reportsTotal = 30;
+
   useEffect(() => {
-    // Show welcome toast if user is logged in
-    if (user) {
+    if (user && !sessionStorage.getItem('dashboard_welcome_toast')) {
       toast({
         title: "Welcome back!",
         description: "Your dashboard is ready.",
       });
+      sessionStorage.setItem('dashboard_welcome_toast', '1');
     }
   }, [user]);
 
@@ -58,7 +63,11 @@ const Dashboard = () => {
                     <div className="flex-1 bg-muted rounded-lg p-6">
                       <div className="text-muted-foreground mb-1">Reports this month</div>
                       <div className="text-2xl font-semibold">
-                        {isLoadingSubscription ? "..." : `${30 - (subscription?.reportsRemaining ?? 0)}/${30}`}
+                        {isLoadingSubscription
+                          ? "..."
+                          : (subscription && (subscription.status === 'active' || subscription.status === 'cancelled' || subscription.status === 'trialing'))
+                            ? `${reportsUsed}/${reportsTotal}`
+                            : `0/${reportsTotal}`}
                       </div>
                     </div>
                     <div className="flex-1 bg-muted rounded-lg p-6">
@@ -66,11 +75,11 @@ const Dashboard = () => {
                       <div className="text-2xl font-semibold">
                         {isLoadingSubscription
                           ? "..."
-                          : hasActiveAccess()
-                          ? subscription?.status === "cancelled"
-                            ? "Cancelled"
-                            : "Monthly"
-                          : "Free"}
+                          : subscription && (subscription.status === 'active' || subscription.status === 'trialing')
+                            ? "Monthly"
+                            : subscription && subscription.status === 'cancelled'
+                              ? "Cancelled"
+                              : "Free"}
                       </div>
                     </div>
                     <div className="flex-1 bg-muted rounded-lg p-6">

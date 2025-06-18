@@ -152,7 +152,7 @@ const DocumentDetail = () => {
             console.error('Could not get signed URL:', signedResult.error);
             setFileUrl(null);
           }
-        } catch (error) {
+      } catch (error) {
           console.error('Error getting file URL:', error);
           setFileUrl(null);
         }
@@ -405,6 +405,31 @@ const DocumentDetail = () => {
     }
   };
 
+  // Check if user can access this document
+  const canAccessDocument = () => {
+    if (!doc || !user) return false;
+
+    // If it's the user's own document
+    if (doc.user_id === user.id) {
+      // Check if document was created during active subscription
+      if (doc.created_at) {
+        const docDate = new Date(doc.created_at);
+        
+        // If subscription is active, user can access
+        if (hasActiveAccess()) return true;
+        
+        // If subscription is cancelled but not expired
+        if (subscription?.status === 'cancelled' && subscription.currentPeriodEnd) {
+          const periodEnd = new Date(subscription.currentPeriodEnd);
+          // Allow access if document was created before subscription end
+          return docDate <= periodEnd;
+        }
+      }
+    }
+
+    return false;
+  };
+
   if ((error && error !== 'null') || !doc) {
     return (
       <div className="flex min-h-screen">
@@ -419,14 +444,14 @@ const DocumentDetail = () => {
               <div className="flex items-center mb-8">
                 <Link to="/dashboard/documents" className="flex items-center text-muted-foreground hover:text-foreground">
                   <ArrowLeft className="h-4 w-4 mr-2" /> Back to Documents
-                    </Link>
+                </Link>
               </div>
               
               <Card>
                 <CardContent className="flex flex-col items-center justify-center py-12">
                   <div className="h-12 w-12 rounded-full bg-red-100 flex items-center justify-center mb-4">
                     <FileText className="h-6 w-6 text-red-600" />
-                      </div>
+                  </div>
                   <h2 className="text-xl font-medium mb-2">Document Not Found</h2>
                   <p className="text-muted-foreground mb-6">
                     {error || "The document may still be processing or doesn't exist."}
@@ -684,7 +709,7 @@ const DocumentDetail = () => {
   }
 
   // Restrict access if not subscribed
-  if (!isLoadingSubscription && !hasActiveAccess()) {
+  if (!isLoadingSubscription && !canAccessDocument()) {
     return (
       <div className="flex min-h-screen">
         <Sidebar />
@@ -695,7 +720,9 @@ const DocumentDetail = () => {
             <div className="max-w-4xl mx-auto flex flex-col items-center justify-center" style={{ minHeight: '60vh' }}>
               <h2 className="text-2xl font-semibold mb-4">Subscription Required</h2>
               <p className="mb-6 text-muted-foreground text-center">
-                You need an active subscription to view document results. Please subscribe to unlock this feature.
+                {!hasActiveAccess() 
+                  ? "You need an active subscription to view document results. Please subscribe to unlock this feature."
+                  : "Your subscription period has ended. Please renew your subscription to access this document."}
               </p>
               <Link to="/dashboard/account">
                 <Button>Go to Subscription Page</Button>
@@ -798,7 +825,7 @@ const DocumentDetail = () => {
                     ).map(([category, findings]) => (
                       <div key={category} className="space-y-4">
                         <h3 className="text-lg font-medium border-b pb-2">{category}</h3>
-                        <div className="space-y-6">
+                  <div className="space-y-6">
                           {findings.map((finding, index) => (
                             <div key={index} className="border-b border-border pb-4 last:border-0 last:pb-0">
                               <h4 className="font-medium mb-2">{finding.marker}</h4>

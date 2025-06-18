@@ -16,7 +16,7 @@ import { useSubscription } from "@/hooks/useSubscription";
 const Account = () => {
   const { profile, isLoading, updateProfile, updatePassword } = useProfile();
   const { user } = useAuth();
-  const { subscription, isLoading: isLoadingSubscription, hasActiveAccess } = useSubscription();
+  const { subscription, isLoading: isLoadingSubscription, hasActiveAccess, getStatusMessage } = useSubscription();
   const location = useLocation();
   const params = new URLSearchParams(location.search);
   const isSuccess = params.get("success");
@@ -52,23 +52,27 @@ const Account = () => {
     try {
       const { data, error } = await supabase.functions.invoke('stripe-payment', {
         body: { 
-          type: 'create-portal-session', 
+          type: 'create-checkout-session', 
           userId: user?.id,
-          domain: 'https://second-light-ai.netlify.app'
+          mode: 'setup',
+          returnUrl: window.location.origin + '/account'
         }
       });
 
-      if (error) throw error;
+      if (error) {
+        throw new Error(error.message);
+      }
+
       if (data?.url) {
         window.location.href = data.url;
       } else {
-        throw new Error('No portal URL received');
+        throw new Error('No checkout URL received from Stripe');
       }
-    } catch (error) {
-      console.error('Error creating portal session:', error);
+    } catch (error: Error | unknown) {
+      console.error('Error creating checkout session:', error);
       toast({
         title: "Error",
-        description: "Failed to open customer portal. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to open payment setup. Please try again.",
         variant: "destructive",
       });
     }
@@ -157,32 +161,54 @@ const Account = () => {
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-3 sm:mb-4">
                           <div className="min-w-0 flex-1">
                             <h3 className="font-medium text-sm sm:text-base">Current Plan</h3>
-                            <p className="text-muted-foreground text-xs sm:text-sm break-words">
-                              {hasActiveAccess() 
-                                ? subscription?.status === 'cancelled' 
-                                  ? 'Monthly Subscription (Cancelled)' 
-                                  : 'Monthly Subscription'
-                                : 'No Active Subscription'}
+                            <p className={`text-sm sm:text-base font-medium ${
+                              !hasActiveAccess() ? 'text-destructive' : 
+                              subscription?.status === 'cancelled' ? 'text-orange-600' : 
+                              'text-green-600'
+                            }`}>
+                              {getStatusMessage()}
                             </p>
                           </div>
-                          <div className="flex-shrink-0">
-                            <span className="text-lg sm:text-xl font-medium">$9.99/month</span>
-                          </div>
+                          
                         </div>
+
+                        {!hasActiveAccess() && (
+                          <div className="text-center py-2">
+                            <p className="text-sm text-muted-foreground mb-2">
+                              Subscribe to unlock AI-powered medical document analysis:
+                              <ul className="list-disc list-inside mt-2 space-y-1">
+                                <li>Analyze up to 30 medical documents per month</li>
+                                <li>AI-powered document summaries and key findings</li>
+                                <li>Downloadable PDF reports</li>
+                                <li>Cancel anytime</li>
+                              </ul>
+                            </p>
+                          </div>
+                        )}
+
                         {hasActiveAccess() && (
                           <div className="text-xs sm:text-sm text-muted-foreground space-y-2">
                             {subscription?.status === 'cancelled' ? (
-                              <p className="text-orange-600 font-medium break-words">
-                                Subscription cancelled - Access until: {new Date(subscription.currentPeriodEnd || subscription.nextBillingDate!).toLocaleDateString()}
-                              </p>
+                              <>
+                                <p className="text-orange-600 font-medium break-words">
+                                  Your subscription is cancelled but you still have access until {new Date(subscription.currentPeriodEnd!).toLocaleDateString()}
+                                </p>
+                                {subscription.reportsRemaining > 0 && (
+                                  <p className="font-medium">
+                                    You can still use your remaining {subscription.reportsRemaining} credits until your subscription ends
+                                  </p>
+                                )}
+                              </>
                             ) : (
-                              <p className="break-words">
-                                Next billing date: {new Date(subscription.nextBillingDate!).toLocaleDateString()}
-                              </p>
+                              <>
+                                <p className="break-words">
+                                  Next billing date: {new Date(subscription.nextBillingDate!).toLocaleDateString()}
+                                </p>
+                                <p className="break-words">
+                                  Reports remaining this month: {subscription.reportsRemaining}/30
+                                </p>
+                              </>
                             )}
-                            <p className="break-words">
-                              Reports remaining this month: {subscription.reportsRemaining}/30
-                            </p>
                           </div>
                         )}
                       </div>
@@ -193,7 +219,10 @@ const Account = () => {
                             {subscription?.status === 'cancelled' ? (
                               <div className="space-y-3">
                                 <p className="text-xs sm:text-sm text-muted-foreground break-words">
-                                  Your subscription is cancelled and will end on {new Date(subscription.currentPeriodEnd || subscription.nextBillingDate!).toLocaleDateString()}
+                                  Your subscription is cancelled and will end on {new Date(subscription.currentPeriodEnd!).toLocaleDateString()}. 
+                                  {subscription.reportsRemaining > 0 ? 
+                                    ` You can still use your remaining ${subscription.reportsRemaining} credits until then.` : 
+                                    ' You have no credits remaining.'}
                                 </p>
                                 <Button 
                                   onClick={handleSubscribe}
@@ -224,7 +253,8 @@ const Account = () => {
                         ) : (
                           <Button 
                             onClick={handleSubscribe}
-                            className="w-full sm:w-auto text-sm sm:text-base"
+                            className="w-full sm:w-auto text-base font-semibold bg-second hover:bg-second-dark text-dark py-3 text-lg"
+                            size="lg"
                           >
                             Subscribe Now
                           </Button>

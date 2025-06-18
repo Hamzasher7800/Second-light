@@ -62,7 +62,11 @@ export function useSubscription() {
     return false;
   };
 
+  // Check if user can upload files based on subscription status and remaining credits
   const canUploadFile = () => {
+    if (!subscription) return false;
+
+    // Check if subscription is active or in valid cancelled state
     if (!hasActiveAccess()) {
       toast({
         title: "Subscription Required",
@@ -72,16 +76,45 @@ export function useSubscription() {
       return false;
     }
 
+    // Check remaining credits
     if (subscription.reportsRemaining <= 0) {
-      toast({
-        title: "Monthly Limit Reached",
-        description: "You've reached your monthly report limit. Please wait for your next billing cycle.",
-        variant: "destructive",
-      });
+      // Different message for cancelled vs active subscriptions
+      if (subscription.status === 'cancelled') {
+        toast({
+          title: "No Credits Remaining",
+          description: "You have no credits remaining. Your subscription will end on " + 
+            new Date(subscription.currentPeriodEnd!).toLocaleDateString(),
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Monthly Limit Reached",
+          description: "You've reached your monthly report limit. Please wait for your next billing cycle.",
+          variant: "destructive",
+        });
+      }
       return false;
     }
 
     return true;
+  };
+
+  // Get subscription status message
+  const getStatusMessage = () => {
+    if (!subscription) return "No subscription";
+    
+    if (subscription.status === 'cancelled') {
+      if (subscription.reportsRemaining > 0) {
+        return `Cancelled - ${subscription.reportsRemaining} credits remaining until ${new Date(subscription.currentPeriodEnd!).toLocaleDateString()}`;
+      }
+      return `Cancelled - Access until ${new Date(subscription.currentPeriodEnd!).toLocaleDateString()}`;
+    }
+    
+    if (subscription.status === 'active') {
+      return `Active - ${subscription.reportsRemaining} credits remaining`;
+    }
+    
+    return subscription.status;
   };
 
   return {
@@ -89,6 +122,7 @@ export function useSubscription() {
     isLoading,
     hasActiveAccess,
     canUploadFile,
+    getStatusMessage,
     refreshSubscription: fetchSubscriptionStatus
   };
 } 
