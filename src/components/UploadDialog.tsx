@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Upload, Shield, FileText, AlertCircle } from "lucide-react";
+import { Upload, Shield, FileText, AlertCircle, X, Check, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -10,17 +10,25 @@ import { Progress } from "@/components/ui/progress";
 import * as pdfjsLib from "pdfjs-dist";
 import "pdfjs-dist/build/pdf.worker.entry";
 import { useSubscription } from "@/hooks/useSubscription";
+import { supabase } from "@/integrations/supabase/client";
 
 interface UploadDialogProps {
   onClose: () => void;
   onUploadComplete?: (newDocId?: string) => void;
 }
 
+interface FileWithStatus {
+  file: File;
+  status: 'pending' | 'uploading' | 'completed' | 'error';
+  progress: number;
+  error?: string;
+  documentId?: string;
+}
+
 const UploadDialog = ({ onClose, onUploadComplete }: UploadDialogProps) => {
   const [isDragging, setIsDragging] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<FileWithStatus[]>([]);
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [processingMessage, setProcessingMessage] = useState<string>("");
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -54,8 +62,8 @@ const UploadDialog = ({ onClose, onUploadComplete }: UploadDialogProps) => {
     }
     
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const file = e.dataTransfer.files[0];
-      handleFile(file);
+      const files = Array.from(e.dataTransfer.files);
+      handleFiles(files);
     }
   };
 
@@ -71,49 +79,63 @@ const UploadDialog = ({ onClose, onUploadComplete }: UploadDialogProps) => {
     }
 
     if (e.target.files && e.target.files.length > 0) {
-      const file = e.target.files[0];
-      handleFile(file);
+      const files = Array.from(e.target.files);
+      handleFiles(files);
     }
   };
 
-  const handleFile = async (file: File) => {
-    if (file.type === "application/pdf") {
-      // Try to load PDF without password
-      const arrayBuffer = await file.arrayBuffer();
-      try {
-        await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-        // Not encrypted, proceed as normal
-        setSelectedFile(file);
-        setPdfError(null);
-      } catch (err: any) {
-        if (err?.name === "PasswordException") {
-          // Encrypted PDF, prompt for password
-          setPendingFile(file);
-          setShowPasswordModal(true);
+  const handleFiles = async (files: File[]) => {
+    const validFiles: FileWithStatus[] = [];
+    
+    for (const file of files) {
+      if (file.type === "application/pdf") {
+        // Try to load PDF without password
+        const arrayBuffer = await file.arrayBuffer();
+        try {
+          await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+          // Not encrypted, proceed as normal
+          validFiles.push({
+            file,
+            status: 'pending',
+            progress: 0
+          });
+          setPdfError(null);
+        } catch (err: any) {
+          if (err?.name === "PasswordException") {
+            // Encrypted PDF, prompt for password
+            setPendingFile(file);
+            setShowPasswordModal(true);
+            setPdfError(null);
+          } else {
+            setPdfError("Failed to read PDF file.");
+          }
+        }
+      } else {
+        // Check if file is PDF, DOC, DOCX, or image
+        const fileType = file.type;
+        const fileName = file.name.toLowerCase();
+        if (
+          fileType === "application/pdf" ||
+          fileType === "application/msword" ||
+          fileType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+          fileType.startsWith("image/") ||
+          fileName.endsWith(".doc") ||
+          fileName.endsWith(".docx")
+        ) {
+          validFiles.push({
+            file,
+            status: 'pending',
+            progress: 0
+          });
           setPdfError(null);
         } else {
-          setPdfError("Failed to read PDF file.");
+          setUploadError("Please upload PDF, DOC, DOCX, or image files");
+          toast.error("Please upload PDF, DOC, DOCX, or image files");
         }
       }
-    } else {
-      // Check if file is PDF, DOC, DOCX, or image
-    const fileType = file.type;
-      const fileName = file.name.toLowerCase();
-    if (
-      fileType === "application/pdf" ||
-        fileType === "application/msword" ||
-        fileType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
-        fileType.startsWith("image/") ||
-        fileName.endsWith(".doc") ||
-        fileName.endsWith(".docx")
-    ) {
-      setSelectedFile(file);
-        setPdfError(null);
-      } else {
-        setUploadError("Please upload a PDF, DOC, DOCX, or image file");
-        toast.error("Please upload a PDF, DOC, DOCX, or image file");
-      }
     }
+    
+    setSelectedFiles(prev => [...prev, ...validFiles]);
   };
 
   const handlePasswordSubmit = async () => {
@@ -122,21 +144,29 @@ const UploadDialog = ({ onClose, onUploadComplete }: UploadDialogProps) => {
     try {
       await pdfjsLib.getDocument({ data: arrayBuffer, password: pdfPassword }).promise;
       // Password correct, proceed
-      setSelectedFile(pendingFile);
+      setSelectedFiles(prev => [...prev, {
+        file: pendingFile,
+        status: 'pending',
+        progress: 0
+      }]);
       setShowPasswordModal(false);
       setPdfPassword("");
       setPdfError(null);
     } catch (err: any) {
       if (err?.name === "PasswordException") {
         setPdfError("Incorrect password. Please try again.");
-    } else {
+      } else {
         setPdfError("Failed to read PDF file.");
       }
     }
   };
 
+  const removeFile = (index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleUpload = async () => {
-    if (!selectedFile) return;
+    if (selectedFiles.length === 0) return;
 
     if (!hasActiveAccess()) {
       setUploadError("Please subscribe to upload documents");
@@ -150,50 +180,145 @@ const UploadDialog = ({ onClose, onUploadComplete }: UploadDialogProps) => {
 
     try {
       setIsUploading(true);
-      setUploadProgress(10);
       setUploadError(null);
-      setProcessingMessage("Preparing document...");
-      // Simulate upload progress
-      const progressInterval = setInterval(() => {
-        setUploadProgress(prev => {
-          if (prev >= 90) {
-            clearInterval(progressInterval);
-            return 90;
-          }
-          return prev + 10;
-        });
-      }, 500);
-      // Remove the loading toast
-      // toast.loading("Uploading and analyzing your document...");
-      // Determine file type from mime type
-      let fileType = "Other";
-      if (selectedFile.type.startsWith("image/")) fileType = "Image";
-      else if (selectedFile.type === "application/pdf") fileType = "PDF";
-      else if (
-        selectedFile.type === "application/msword" ||
-        selectedFile.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
-        selectedFile.name.toLowerCase().endsWith(".doc") ||
-        selectedFile.name.toLowerCase().endsWith(".docx")
-      ) fileType = "Word Document";
-      // Use the file name as the title, but remove the extension
-      const title = selectedFile.name.replace(/\.[^/.]+$/, "");
-      setProcessingMessage(fileType === "PDF" ? "Extracting text from PDF..." : "Processing image...");
-      const document = await documentService.uploadDocument({
-        title,
-        type: fileType,
-        file: selectedFile
-      });
-      clearInterval(progressInterval);
-      setUploadProgress(100);
-      setProcessingMessage("Analyzing document content...");
-      toast.success("Document uploaded! Analysis in progress...");
-      if (onUploadComplete) {
-        onUploadComplete(document.id);
-      } else {
-        onClose();
+      setProcessingMessage("Uploading documents...");
+
+      const pendingFiles = selectedFiles.filter(f => f.status === 'pending');
+      
+      if (pendingFiles.length === 0) {
+        toast.success("No files to upload");
+        return;
       }
-      // Navigate to document detail page
-      navigate(`/dashboard/documents/${document.id}`);
+
+      // If we have multiple image files, process them as a single document
+      if (pendingFiles.length > 1 && pendingFiles.every(f => f.file.type.startsWith("image/"))) {
+        setProcessingMessage("Processing multiple images as single document...");
+        
+        // Upload all files to storage first
+        const uploadedFiles = [];
+        for (const fileWithStatus of pendingFiles) {
+          try {
+            const fileName = `${Math.random().toString(36).substring(2, 15)}_${fileWithStatus.file.name}`;
+            const filePath = `${(await supabase.auth.getUser()).data.user?.id}/${fileName}`;
+
+            const { data: uploadData, error: uploadError } = await supabase.storage
+              .from("documents")
+              .upload(filePath, fileWithStatus.file);
+
+            if (uploadError) {
+              throw new Error(uploadError.message);
+            }
+
+            // Get the public URL
+            const { data: urlData } = supabase.storage
+              .from("documents")
+              .getPublicUrl(uploadData.path);
+
+            if (!urlData?.publicUrl) {
+              throw new Error("Failed to get public URL for uploaded file");
+            }
+
+            uploadedFiles.push({
+              file: fileWithStatus.file,
+              path: uploadData.path,
+              url: urlData.publicUrl
+            });
+          } catch (error) {
+            console.error(`Error uploading file ${fileWithStatus.file.name}:`, error);
+            throw error;
+          }
+        }
+
+        // Create a single document record
+        const baseTitle = uploadedFiles[0]?.file?.name ? uploadedFiles[0].file.name.replace(/\.[^/.]+$/, "") : "Document";
+        const { data: document, error: insertError } = await supabase
+          .from("documents")
+          .insert({
+            title: baseTitle,
+            type: "Multiple Images",
+            file_path: uploadedFiles[0].path, // Use first file path as primary
+            status: "Processing",
+            processing_status: "pending",
+            user_id: (await supabase.auth.getUser()).data.user?.id,
+          })
+          .select()
+          .single();
+
+        if (insertError) {
+          throw new Error(insertError.message);
+        }
+
+        // Process all images together
+        const imageUrls = uploadedFiles.map(f => f.url);
+        await documentService.processMultipleImagesAsSingleDocument(
+          document.id,
+          baseTitle,
+          "Multiple Images",
+          imageUrls
+        );
+
+        // Update all file statuses to completed
+        setSelectedFiles(prev => prev.map((fileWithStatus, index) => {
+          const isPending = pendingFiles.some(pf => pf.file === fileWithStatus.file);
+          if (isPending) {
+            return { 
+              ...fileWithStatus, 
+              status: 'completed', 
+              progress: 100, 
+              documentId: document.id 
+            };
+          }
+          return fileWithStatus;
+        }));
+
+        setProcessingMessage("Multiple images processed as single document!");
+        toast.success("Multiple images processed as single document!");
+        
+        if (onUploadComplete) {
+          onUploadComplete(document.id);
+        } else {
+          onClose();
+        }
+      } else {
+        // Process files individually (existing logic)
+        const files = pendingFiles.map(f => f.file);
+        const baseTitle = files.length > 1 ? "Multiple Documents" : files[0].name.replace(/\.[^/.]+$/, "");
+        
+        // Determine file type (assuming all files are the same type)
+        const fileType = files[0].type.startsWith("image/") ? "Image" : 
+                        files[0].type === "application/pdf" ? "PDF" : "Word Document";
+
+        const documents = await documentService.uploadMultipleDocuments({
+          title: baseTitle,
+          type: fileType,
+          files: files
+        });
+
+        // Update file statuses to completed
+        setSelectedFiles(prev => prev.map((fileWithStatus, index) => {
+          const docIndex = documents.findIndex(doc => 
+            doc.title.includes(fileWithStatus.file.name.replace(/\.[^/.]+$/, ""))
+          );
+          if (docIndex !== -1) {
+            return { 
+              ...fileWithStatus, 
+              status: 'completed', 
+              progress: 100, 
+              documentId: documents[docIndex].id 
+            };
+          }
+          return fileWithStatus;
+        }));
+        
+        setProcessingMessage("All documents uploaded! Analysis in progress...");
+        toast.success("All documents uploaded! Analysis in progress...");
+        
+        if (onUploadComplete && documents.length > 0) {
+          onUploadComplete(documents[0].id); // Navigate to first document
+        } else {
+          onClose();
+        }
+      }
     } catch (error: unknown) {
       setUploadError(error instanceof Error ? error.message : String(error));
       toast.error(`Upload failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -204,6 +329,19 @@ const UploadDialog = ({ onClose, onUploadComplete }: UploadDialogProps) => {
 
   const openFileDialog = () => {
     document.getElementById('dialog-file-upload')?.click();
+  };
+
+  const getStatusIcon = (status: FileWithStatus['status']) => {
+    switch (status) {
+      case 'pending':
+        return <FileText className="h-4 w-4 text-muted-foreground" />;
+      case 'uploading':
+        return <Upload className="h-4 w-4 text-blue-500 animate-pulse" />;
+      case 'completed':
+        return <Check className="h-4 w-4 text-green-500" />;
+      case 'error':
+        return <AlertCircle className="h-4 w-4 text-red-500" />;
+    }
   };
 
   return (
@@ -243,6 +381,16 @@ const UploadDialog = ({ onClose, onUploadComplete }: UploadDialogProps) => {
         </Alert>
       )}
       
+      {/* Spinner and message for upload/analysis */}
+      {isUploading && (
+        <div className="flex flex-col items-center gap-3 py-6">
+          <Loader2 className="animate-spin h-8 w-8 text-second" />
+          <p className="text-base font-semibold text-second">
+            {processingMessage || "Uploading and analyzing your files. This may take a moment..."}
+          </p>
+        </div>
+      )}
+      
       <div
         className={`border-2 border-dashed rounded-xl p-10 text-center ${
           isDragging ? "border-second bg-second/5" : "border-border"
@@ -254,32 +402,31 @@ const UploadDialog = ({ onClose, onUploadComplete }: UploadDialogProps) => {
       >
         <div className="flex flex-col items-center justify-center gap-4">
           <div className="h-12 w-12 rounded-full bg-second/20 flex items-center justify-center">
-            {selectedFile?.type.startsWith("image/") ? (
-              <FileText className="h-6 w-6 text-second" />
-            ) : (
-              <Upload className="h-6 w-6 text-second" />
-            )}
+            <Upload className="h-6 w-6 text-second" />
           </div>
           
           <div className="space-y-2">
             <p className="text-sm font-medium">
-              {selectedFile ? selectedFile.name : "Drag and drop your file here"}
+              {selectedFiles.length > 0 
+                ? `${selectedFiles.length} file(s) selected` 
+                : "Drag and drop your files here"
+              }
             </p>
             <p className="text-xs text-muted-foreground">
-              {selectedFile 
-                ? `${(selectedFile.size / 1024 / 1024).toFixed(2)} MB` 
-                : "PDF, DOC, DOCX, or image files (max 10MB)"
+              {selectedFiles.length > 0 
+                ? `${selectedFiles.length} file(s) ready to upload` 
+                : "PDF, DOC, DOCX, or image files (max 10MB each)"
               }
             </p>
           </div>
           
-          {!selectedFile && (
+          {selectedFiles.length === 0 && (
             <div className="relative">
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <div className="bg-second hover:bg-second-dark text-dark rounded-md px-4 py-2 text-sm cursor-pointer flex items-center gap-2">
-                      <Shield className="h-4 w-4" /> Select file
+                      <Shield className="h-4 w-4" /> Select files
                     </div>
                   </TooltipTrigger>
                   <TooltipContent className="bg-white text-dark border border-second/20">
@@ -292,13 +439,14 @@ const UploadDialog = ({ onClose, onUploadComplete }: UploadDialogProps) => {
                 name="dialog-file-upload"
                 type="file"
                 accept=".pdf,.doc,.docx,image/*"
+                multiple
                 className="sr-only"
                 onChange={handleFileChange}
               />
             </div>
           )}
           
-          {selectedFile && !isUploading && (
+          {selectedFiles.length > 0 && !isUploading && (
             <Button 
               className="bg-second hover:bg-second-dark text-dark" 
               onClick={(e) => {
@@ -306,17 +454,8 @@ const UploadDialog = ({ onClose, onUploadComplete }: UploadDialogProps) => {
                 handleUpload();
               }}
             >
-              Upload and Analyze
+              Upload and Analyze All
             </Button>
-          )}
-          
-          {isUploading && (
-            <div className="w-full space-y-2">
-              <Progress value={uploadProgress} className="w-full" />
-              <p className="text-xs text-muted-foreground">
-                {processingMessage || (uploadProgress < 100 ? "Uploading..." : "Processing...")}
-              </p>
-            </div>
           )}
           
           <p className="text-xs text-muted-foreground flex items-center gap-1 mt-2">
@@ -324,13 +463,62 @@ const UploadDialog = ({ onClose, onUploadComplete }: UploadDialogProps) => {
           </p>
         </div>
       </div>
+
+      {/* File List */}
+      {selectedFiles.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-sm font-medium">Selected Files</h3>
+          <div className="space-y-2 max-h-60 overflow-y-auto">
+            {selectedFiles.map((fileWithStatus, index) => (
+              <div
+                key={`${fileWithStatus.file.name}-${index}`}
+                className="flex items-center justify-between p-3 border rounded-lg bg-muted/50"
+              >
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  {getStatusIcon(fileWithStatus.status)}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">
+                      {fileWithStatus.file.name}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {(fileWithStatus.file.size / 1024 / 1024).toFixed(2)} MB
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  {fileWithStatus.status === 'uploading' && (
+                    <Progress value={fileWithStatus.progress} className="w-20" />
+                  )}
+                  {fileWithStatus.status === 'error' && (
+                    <p className="text-xs text-red-500">{fileWithStatus.error}</p>
+                  )}
+                  {/* Hide remove button while uploading */}
+                  {fileWithStatus.status === 'pending' && !isUploading && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeFile(index);
+                      }}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       
       <div className="text-xs text-muted-foreground mt-4">
         <p className="font-medium">What happens after upload?</p>
         <ol className="list-decimal list-inside mt-1 space-y-1">
-          <li>Your document is securely uploaded and encrypted</li>
+          <li>Your documents are securely uploaded and encrypted</li>
           <li>Our AI analyzes the content to extract key medical information</li>
-          <li>You'll receive a detailed report with findings and recommendations</li>
+          <li>You'll receive detailed reports with findings and recommendations</li>
         </ol>
       </div>
       

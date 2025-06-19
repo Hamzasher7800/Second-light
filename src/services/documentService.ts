@@ -44,6 +44,12 @@ export interface DocumentUpload {
   file: File;
 }
 
+export interface MultipleDocumentUpload {
+  title: string;
+  type: string;
+  files: File[];
+}
+
 const SUPABASE_URL = "https://qlkkjojkaoniwhgdxelh.supabase.co";
 
 export const documentService = {
@@ -237,6 +243,34 @@ export const documentService = {
     return document;
   },
 
+  // Upload multiple documents
+  async uploadMultipleDocuments(documentData: MultipleDocumentUpload): Promise<Document[]> {
+    const uploadedDocuments: Document[] = [];
+    
+    for (let i = 0; i < documentData.files.length; i++) {
+      const file = documentData.files[i];
+      
+      // Create a unique title for each file
+      const baseTitle = documentData.title || file.name.replace(/\.[^/.]+$/, "");
+      const title = documentData.files.length > 1 ? `${baseTitle} (${i + 1})` : baseTitle;
+      
+      try {
+        const document = await this.uploadDocument({
+          title,
+          type: documentData.type,
+          file: file
+        });
+        
+        uploadedDocuments.push(document);
+      } catch (error) {
+        console.error(`Error uploading file ${i + 1}:`, error);
+        // Continue with other files even if one fails
+      }
+    }
+    
+    return uploadedDocuments;
+  },
+
   // Process a document with OpenAI
   async processDocument(
     documentId: string, 
@@ -362,6 +396,93 @@ export const documentService = {
       }
 
       console.log('Processing success:', result);
+      return;
+    } catch (error) {
+      // Update document status to error
+      const { error: updateError } = await supabase
+        .from("documents")
+        .update({
+          processing_status: "error",
+          status: "Error",
+          error_message: error instanceof Error ? error.message : "Unknown error during processing",
+        })
+        .eq("id", documentId);
+
+      if (updateError) {
+        console.error("Error updating document status:", updateError);
+      }
+
+      throw error;
+    }
+  },
+
+  // Process multiple images as a single document
+  async processMultipleImagesAsSingleDocument(
+    documentId: string,
+    title: string,
+    type: string,
+    imageUrls: string[]
+  ): Promise<void> {
+    try {
+      // Update document status to processing
+      const { error: updateError } = await supabase
+        .from("documents")
+        .update({
+          processing_status: "processing",
+        })
+        .eq("id", documentId);
+
+      if (updateError) {
+        console.error("Error updating document status:", updateError);
+      }
+
+      // Get the auth token
+      const { data: authData } = await supabase.auth.getSession();
+      if (!authData.session) {
+        throw new Error("User is not authenticated");
+      }
+
+      // Prepare the request payload for multiple images
+      const payload = {
+        documentId,
+        documentType: type,
+        documentTitle: title,
+        documentImages: imageUrls,
+      };
+
+      console.log('Multi-image processing payload:', payload);
+
+      // Call the edge function to process the multiple images
+      const response = await fetch(
+        `${SUPABASE_URL}/functions/v1/process-medical-document`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${authData.session.access_token}`,
+          },
+          body: JSON.stringify(payload),
+        }
+      );
+
+      // Log the response for debugging
+      const responseText = await response.text();
+      console.log('Multi-image processing response:', responseText);
+      
+      let result;
+      try {
+        result = JSON.parse(responseText);
+      } catch (e) {
+        console.error('Failed to parse response:', e);
+        throw new Error('Invalid response from server');
+      }
+
+      if (!response.ok) {
+        console.error('Multi-image processing error:', result);
+        throw new Error(result.error || "Error processing multiple images");
+      }
+
+      console.log('Multi-image processing success:', result);
       return;
     } catch (error) {
       // Update document status to error

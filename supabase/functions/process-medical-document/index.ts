@@ -1,5 +1,8 @@
+// @ts-expect-error Deno imports are only available in Deno runtime
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+// @ts-expect-error Deno imports are only available in Deno runtime
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.7.1";
+// @ts-expect-error Deno imports are only available in Deno runtime
 import OpenAI from "https://esm.sh/openai@4.20.1";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -16,11 +19,247 @@ function validateRequest(data) {
   if (!data.documentTitle) {
     throw new Error("Document title is required");
   }
-  // Only require documentText if documentImage is not present
-  if (!data.documentText && !data.documentImage) {
-    throw new Error("Either document text or document image is required for analysis");
+  // Support both single image and multiple images
+  if (!data.documentText && !data.documentImage && !data.documentImages) {
+    throw new Error("Either document text, document image, or document images are required for analysis");
   }
 }
+
+// Add text chunking function
+function splitTextIntoChunks(text: string, maxChunkSize: number = 4000): string[] {
+  const chunks: string[] = [];
+  let currentChunk = "";
+  
+  // Split by paragraphs or sections
+  const sections = text.split(/\n\n+/);
+  
+  for (const section of sections) {
+    // If adding this section would exceed chunk size, start a new chunk
+    if ((currentChunk + section).length > maxChunkSize && currentChunk.length > 0) {
+      chunks.push(currentChunk.trim());
+      currentChunk = "";
+    }
+    
+    // If a single section is too large, split it by sentences
+    if (section.length > maxChunkSize) {
+      const sentences = section.split(/[.!?]+/);
+      for (const sentence of sentences) {
+        if ((currentChunk + sentence).length > maxChunkSize && currentChunk.length > 0) {
+          chunks.push(currentChunk.trim());
+          currentChunk = "";
+        }
+        currentChunk += sentence + ". ";
+      }
+    } else {
+      currentChunk += section + "\n\n";
+    }
+  }
+  
+  // Add the last chunk if not empty
+  if (currentChunk.trim().length > 0) {
+    chunks.push(currentChunk.trim());
+  }
+  
+  return chunks;
+}
+
+// Add TypeScript interfaces for better type safety
+interface KeyFinding {
+  marker: string;
+  value: string;
+  reference_range?: string;
+  interpretation?: string;
+  category?: string;
+  explanation?: string;
+}
+
+interface AnalysisResult {
+  summary?: string;
+  key_findings?: KeyFinding[];
+  recommendations?: string[];
+  critical_values?: string[];
+  metadata?: {
+    patient_info?: {
+      date?: string;
+      provider?: string;
+      facility?: string;
+    }
+  }
+}
+
+// Update mergeAnalysisResults function with proper type safety
+function mergeAnalysisResults(results: AnalysisResult[]): AnalysisResult {
+  const merged: AnalysisResult = {
+    summary: "",
+    key_findings: [],
+    recommendations: [],
+    critical_values: [],
+    metadata: {
+      patient_info: {
+        date: "",
+        provider: "",
+        facility: ""
+      }
+    }
+  };
+
+  for (const result of results) {
+    // Concatenate summaries
+    if (result.summary) {
+      merged.summary = ((merged.summary || "") + " " + result.summary).trim();
+    }
+
+    // Merge key findings
+    if (result.key_findings && merged.key_findings) {
+      merged.key_findings.push(...result.key_findings);
+    }
+
+    // Merge recommendations
+    if (result.recommendations && merged.recommendations) {
+      merged.recommendations.push(...result.recommendations);
+    }
+
+    // Merge critical values
+    if (result.critical_values && merged.critical_values) {
+      merged.critical_values.push(...result.critical_values);
+    }
+
+    // Update metadata if present
+    if (result.metadata?.patient_info && merged.metadata?.patient_info) {
+      const patientInfo = merged.metadata.patient_info;
+      const newInfo = result.metadata.patient_info;
+      
+      if (!patientInfo.date && newInfo.date) {
+        patientInfo.date = newInfo.date;
+      }
+      if (!patientInfo.provider && newInfo.provider) {
+        patientInfo.provider = newInfo.provider;
+      }
+      if (!patientInfo.facility && newInfo.facility) {
+        patientInfo.facility = newInfo.facility;
+      }
+    }
+  }
+
+  // Remove duplicate findings
+  if (merged.key_findings) {
+    merged.key_findings = Array.from(new Map(
+      merged.key_findings.map(item => [item.marker + item.value, item])
+    ).values());
+  }
+
+  // Remove duplicate recommendations
+  if (merged.recommendations) {
+    merged.recommendations = [...new Set(merged.recommendations)];
+  }
+
+  // Remove duplicate critical values
+  if (merged.critical_values) {
+    merged.critical_values = [...new Set(merged.critical_values)];
+  }
+
+  // Summarize the merged summary if it's too long
+  if (merged.summary && merged.summary.length > 500) {
+    merged.summary = merged.summary.substring(0, 497) + "...";
+  }
+
+  return merged;
+}
+
+// Add function to process multiple images as a single document
+async function processMultipleImagesAsSingleDocument(openai: OpenAI, images: string[], documentTitle: string): Promise<string> {
+  console.log(`Processing ${images.length} images as a single document: ${documentTitle}`);
+  
+  const imageContents = [];
+  
+  for (let i = 0; i < images.length; i++) {
+    const imageUrl = images[i];
+    console.log(`Processing image ${i + 1}/${images.length}:`, imageUrl);
+    
+    try {
+      // Verify the image URL is accessible
+      const urlTest = await fetch(imageUrl);
+      if (!urlTest.ok) {
+        console.error(`Image ${i + 1} not accessible:`, urlTest.status);
+        continue;
+      }
+      
+      const contentType = urlTest.headers.get('content-type');
+      if (!contentType?.startsWith('image/')) {
+        console.error(`Image ${i + 1} invalid content type:`, contentType);
+        continue;
+      }
+      
+      // Process the image with GPT-4 Vision
+      const visionResponse = await openai.chat.completions.create({
+        model: "gpt-4-vision-preview",
+        messages: [
+          {
+            role: "system",
+            content: `You are a medical document analyzer specialized in extracting information from medical reports, lab results, and clinical images. This is image ${i + 1} of ${images.length} in a series for document "${documentTitle}". Extract all relevant medical information including test results, reference ranges, diagnoses, and recommendations. Format numeric values and units consistently. If this appears to be part of a multi-page document, note any page numbers or sequence indicators.`
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "image_url",
+                image_url: { url: imageUrl }
+              },
+              {
+                type: "text",
+                text: `Please analyze this medical document (image ${i + 1} of ${images.length}) and extract all relevant information. Include test results with values and reference ranges if present. Structure the information clearly. If this is part of a multi-page document, maintain context with other pages.`
+              }
+            ]
+          }
+        ],
+        max_tokens: 4096
+      });
+      
+      const content = visionResponse?.choices?.[0]?.message?.content;
+      if (content) {
+        imageContents.push(`--- Image ${i + 1} Content ---\n${content}`);
+      }
+      
+    } catch (error) {
+      console.error(`Error processing image ${i + 1}:`, error);
+      imageContents.push(`--- Image ${i + 1} Error ---\nFailed to process image: ${error.message}`);
+    }
+  }
+  
+  // Combine all image contents into a single text
+  const combinedText = imageContents.join('\n\n');
+  
+  // If we have multiple images, create a summary analysis
+  if (images.length > 1) {
+    try {
+      const summaryResponse = await openai.chat.completions.create({
+        model: "gpt-4",
+        messages: [
+          {
+            role: "system",
+            content: `You are analyzing a multi-image medical document. The following text contains information extracted from ${images.length} images. Please provide a comprehensive analysis that combines all the information into a coherent medical report.`
+          },
+          {
+            role: "user",
+            content: `Please analyze this multi-image medical document and provide a comprehensive summary:\n\n${combinedText}`
+          }
+        ],
+        max_tokens: 2000,
+        temperature: 0.2
+      });
+      
+      const summaryContent = summaryResponse?.choices?.[0]?.message?.content;
+      if (summaryContent) {
+        return summaryContent;
+      }
+    } catch (error) {
+      console.error('Error creating summary analysis:', error);
+    }
+  }
+  
+  return combinedText;
+}
+
 serve(async (req)=>{
   let startTime = performance.now();
   // Handle CORS preflight requests
@@ -31,12 +270,12 @@ serve(async (req)=>{
   }
 
     // Setup clients
-  // @ts-expect-error Deno global is only available in Deno runtime, not Node
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-  // @ts-expect-error Deno global is only available in Deno runtime, not Node
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
-  // @ts-expect-error Deno global is only available in Deno runtime, not Node
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  // @ts-expect-error Deno global is only available in Deno runtime
+    const supabaseUrl = Deno?.env.get("SUPABASE_URL") || "";
+  // @ts-expect-error Deno global is only available in Deno runtime
+    const supabaseAnonKey = Deno?.env.get("SUPABASE_ANON_KEY") || "";
+  // @ts-expect-error Deno global is only available in Deno runtime
+    const supabaseServiceKey = Deno?.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
     const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
       global: {
         headers: {
@@ -44,9 +283,10 @@ serve(async (req)=>{
         }
       }
     });
-  // @ts-expect-error Deno global is only available in Deno runtime, not Node
+  // @ts-expect-error Deno global is only available in Deno runtime
     const openai = new OpenAI({
-      apiKey: Deno.env.get("OPENAI_API_KEY") || ""
+      // @ts-expect-error Deno global is only available in Deno runtime
+      apiKey: Deno?.env.get("OPENAI_API_KEY") || ""
     });
 
   let requestData;
@@ -70,7 +310,7 @@ serve(async (req)=>{
   }
 
   try {
-    const { documentText, documentType, documentTitle, documentImage } = requestData;
+    const { documentText, documentType, documentTitle, documentImage, documentImages } = requestData;
     // Start the processing
     await supabaseClient.from("documents").update({
       processing_status: "processing",
@@ -89,10 +329,22 @@ serve(async (req)=>{
     const logId = logData?.id;
 
     let text = documentText;
-    // If no valid text, but image is present, use GPT-4o Vision API
-    if ((!text || text.trim().length < 20) && documentImage) {
+    
+    // Handle multiple images if present
+    if (documentImages && Array.isArray(documentImages) && documentImages.length > 0) {
       try {
-        console.log('Starting image processing with URL:', documentImage);
+        console.log('Starting multi-image processing with', documentImages.length, 'images');
+        text = await processMultipleImagesAsSingleDocument(openai, documentImages, documentTitle);
+        console.log('Successfully processed multiple images');
+      } catch (multiImageError) {
+        console.error('Multi-image processing error:', multiImageError);
+        throw new Error(`Multi-image processing failed: ${multiImageError.message}`);
+      }
+    }
+    // Fallback to single image processing
+    else if ((!text || text.trim().length < 20) && documentImage) {
+      try {
+        console.log('Starting single image processing with URL:', documentImage);
 
         // 1. First verify the image URL is accessible
         try {
@@ -117,12 +369,6 @@ serve(async (req)=>{
 
         // 2. Call GPT-4o with the image
         console.log("About to call GPT-4o with image URL:", documentImage);
-        console.log("Payload to OpenAI:", JSON.stringify([
-          {
-            type: "image_url",
-            image_url: { url: documentImage }
-          }
-        ], null, 2));
         const visionResponse = await openai.chat.completions.create({
           model: "gpt-4-vision-preview",
           messages: [
@@ -193,196 +439,75 @@ serve(async (req)=>{
     if (documentType && documentType.toLowerCase().includes("image")) {
       prePrompt = `The following text was extracted from an image (possibly a photo or scan of a medical report). The text may be noisy or unstructured. If you detect tabular or list-like data (such as lab results), do your best to reconstruct the table and extract each row as a key finding. If the image is a narrative report, extract diagnoses, medications, symptoms, and other findings as usual.\n\n`;
     }
-    try {
-      response = await openai.chat.completions.create({
-        model: "gpt-4",
-      messages: [
-        {
-          role: "system",
-            content: `${prePrompt}You are a medical document analyzer capable of processing any type of medical document in any language. Your tasks are:
 
-1. If the document is not in English, first translate it to English (do not include the translation in your response).
-2. Analyze the (translated) document and extract as much structured information as possible, even if the document is narrative, tabular, or not in a standard format.
-3. Always return your response in English, in the following JSON format:
+    // Split text into chunks if it's too long
+    const chunks = splitTextIntoChunks(text);
+    const analysisResults: AnalysisResult[] = [];
+
+    for (const chunk of chunks) {
+      try {
+        // Update the system prompt in the OpenAI call
+        const systemPrompt = `${prePrompt}You are analyzing a chunk of a larger medical document. Focus on extracting key information from this section. ${chunks.length > 1 ? "This is one part of a larger document, so focus on the information present in this chunk." : ""}
+
+Your task is to analyze medical documents and extract structured information. Please return a JSON object with the following structure:
 {
-  "summary": "Brief 2-3 sentence overview of the document",
+  "summary": "A concise summary of the key points",
   "key_findings": [
     {
-      "marker": "Diagnosis, symptom, medication, allergy, lab result, or other key finding (inferred or explicit)",
-      "value": "Details or value if available, otherwise 'Not specified'",
-      "reference_range": "Normal range if applicable, otherwise ''",
-      "interpretation": "Clinical interpretation or significance, otherwise ''",
-      "category": "Diagnosis | Symptom | Medication | Allergy | Lab Result | History | Other"
+      "marker": "Test/Measurement name",
+      "value": "Actual value",
+      "reference_range": "Normal range if available",
+      "interpretation": "High/Low/Normal",
+      "category": "Lab/Vital/Imaging/etc",
+      "explanation": "Additional context"
     }
   ],
+  "recommendations": ["List of recommendations"],
+  "critical_values": ["List of any critical or abnormal values"],
   "metadata": {
     "patient_info": {
-      "date": "Document date if available, otherwise ''",
-      "provider": "Healthcare provider if available, otherwise ''",
-      "facility": "Medical facility if available, otherwise ''"
+      "date": "Document date if found",
+      "provider": "Provider name if found",
+      "facility": "Facility name if found"
     }
-  },
-  "recommendations": [
-    "List of recommendations, follow-ups, or next steps"
-  ],
-  "critical_values": [
-    "Any values or findings that require immediate attention"
-  ]
+  }
 }
 
-- If a field is not present in the document, fill it with an empty string or 'Not specified'.
-- If the document is not medical in nature, respond ONLY with this JSON: {"error": "This document does not appear to be a medical document"}
-- Do NOT include the translation in your response, only the analysis in English.
-- If the document is corrupted or unreadable, respond with a summary explaining that no meaningful information could be extracted.
-- **Never leave key_findings empty for a medical document. If explicit findings are not present, INFER or SUMMARIZE likely diagnoses, medications, symptoms, or other findings based on the content. Always provide at least 2-3 key findings, even if they must be inferred from the context.**
-- **If the input is a noisy or unstructured OCR extraction from an image (including non-English text), do your best to:**
-  - Translate all medical terms and values to English.
-  - Reconstruct tables or lists of findings.
-  - For each lab result or finding, create a key finding with:
-    - marker: The test name (translated to English, e.g., 'ΕΡΥΘΡΑ ΑΙΜΟΣΦΑΙΡΙΑ (RBC)' → 'Red Blood Cells (RBC)')
-    - value: The measured value and units (e.g., '4.81 10^6/μl')
-    - reference_range: The normal/reference range (e.g., '3.60 - 5.50')
-    - interpretation: 'High', 'Low', or 'Normal' based on the value and reference range
-    - category: 'Lab Result'
+Focus on accuracy and maintain medical terminology. If processing a partial document, extract information present in this section only.`;
 
-EXAMPLE (for a Greek lab report row):
-OCR: 'ΕΡΥΘΡΑ ΑΙΜΟΣΦΑΙΡΙΑ (RBC)   4.81   10^6/μl   3.60 - 5.50'
-JSON:
-{
-  "marker": "Red Blood Cells (RBC)",
-  "value": "4.81 10^6/μl",
-  "reference_range": "3.60 - 5.50",
-  "interpretation": "Normal",
-  "category": "Lab Result"
-}
-
-- If the document is not in English, always translate all findings and the summary to English.
-- If the OCR is messy, do your best to infer the correct columns and values.
-- **Never leave key_findings empty for a medical document.**
-- **If the input is a noisy or unstructured OCR extraction from an image, do your best to reconstruct the table or list of findings. For each lab result or finding, create a key finding as in the example. If you see lines like 'LEUKOCYTES, BLOOD 11.0 x10^9/L H 4.0-10.0', parse them as marker, value, interpretation, and reference range.**
-- **EXAMPLES for narrative and tabular data:**
-  - marker: "Diagnosis", value: "Colitis Ulcerosa", category: "Diagnosis"
-  - marker: "Medication", value: "Prednisone 10mg daily", category: "Medication"
-  - marker: "Symptom", value: "Dyspnoea", category: "Symptom"
-  - marker: "Lab Result", value: "Leukocytes 11.0 x10^9/L", reference_range: "4.0-10.0", interpretation: "High", category: "Lab Result"
-  - marker: "Lab Result", value: "Hemoglobin 150 g/L", reference_range: "135-175", interpretation: "Normal", category: "Lab Result"`
-        },
-        {
-          role: "user",
-          content: text
-        }
-      ],
-        temperature: 0.2,
-        max_tokens: 2000
-      });
-    } catch (apiError) {
-      console.error("OpenAI API Error:", apiError);
-      throw new Error(`OpenAI API error: ${apiError.message}`);
-    }
-
-    // Parse the response with better error handling
-    let analysis;
-    try {
-      const content = response?.choices?.[0]?.message?.content;
-      
-      if (!content) {
-        console.error("Empty or invalid response:", response);
-        throw new Error("Empty or invalid response from OpenAI");
-      }
-
-      try {
-        // Try to parse the content directly first
-        analysis = JSON.parse(content.trim());
-      } catch (jsonError) {
-        // If not JSON, treat the whole content as summary
-        analysis = {
-          summary: content,
-          key_findings: [],
-          recommendations: [],
-          critical_values: [],
-          metadata: {}
-        };
-      }
-
-      // Validate the response structure
-      if (!analysis || typeof analysis !== 'object') {
-        throw new Error("Response is not a valid object");
-      }
-
-      // Special handling for error responses
-      if (analysis.error) {
-        // Log the text content for debugging
-        console.log("Document text being analyzed:", text);
-        // If it looks like a lab report but was rejected, override the error
-        if (text.toLowerCase().includes('blood') || 
-            text.toLowerCase().includes('test') || 
-            text.toLowerCase().includes('laboratory') ||
-            text.toLowerCase().includes('specimen')) {
-          console.log("Detected medical terms in document, proceeding with analysis");
-          throw new Error("Document appears to be medical but analysis failed");
-        }
-        throw new Error(analysis.error);
-      }
-
-      // Validate required fields
-      if (!analysis.summary || !Array.isArray(analysis.key_findings)) {
-        console.error("Invalid response structure:", analysis);
-        throw new Error("Response missing required fields (summary or key_findings)");
-      }
-
-      // Ensure each key finding has the required structure
-      analysis.key_findings.forEach((finding, index) => {
-        if (!finding.marker || !finding.value) {
-          throw new Error(`Invalid key finding at index ${index}: missing required fields`);
-        }
-      });
-
-      if (!analysis.key_findings || analysis.key_findings.length === 0) {
-        // Fallback: second OpenAI call for key findings extraction
-        const fallbackResponse = await openai.chat.completions.create({
+        const chunkResponse = await openai.chat.completions.create({
           model: "gpt-4",
           messages: [
             {
               role: "system",
-              content: `You are an expert medical information extractor. Given the following medical report, extract all possible key findings as a JSON array. Each finding should have:
-- marker: Diagnosis, medication, symptom, allergy, lab result, or other key finding (inferred or explicit)
-- value: Details or value if available, otherwise 'Not specified'
-- reference_range: Normal range if applicable, otherwise ''
-- interpretation: Clinical interpretation or significance, otherwise ''
-- category: Diagnosis | Symptom | Medication | Allergy | Lab Result | History | Other
-
-Return ONLY a JSON array of findings, e.g.:
-[
-  {"marker": "Diagnosis", "value": "Colitis Ulcerosa", "reference_range": "", "interpretation": "", "category": "Diagnosis"},
-  {"marker": "Medication", "value": "Prednisone 10mg daily", "reference_range": "", "interpretation": "", "category": "Medication"}
-]`
+              content: systemPrompt
             },
             {
               role: "user",
-              content: text
+              content: chunk
             }
           ],
           temperature: 0.2,
-          max_tokens: 1000
+          max_tokens: 2000
         });
 
-        // Parse the fallback response
-        let fallbackFindings = [];
-        try {
-          const fallbackContent = fallbackResponse?.choices?.[0]?.message?.content;
-          fallbackFindings = JSON.parse(fallbackContent.trim());
-          if (Array.isArray(fallbackFindings) && fallbackFindings.length > 0) {
-            analysis.key_findings = fallbackFindings;
+        const content = chunkResponse?.choices?.[0]?.message?.content;
+        if (content) {
+          try {
+            const chunkAnalysis: AnalysisResult = JSON.parse(content.trim());
+            analysisResults.push(chunkAnalysis);
+          } catch (parseError) {
+            console.error("Error parsing chunk response:", parseError);
           }
-        } catch (e) {
-          console.error("Fallback extraction failed:", e);
         }
+      } catch (apiError) {
+        console.error("OpenAI API Error for chunk:", apiError);
       }
-
-    } catch (parseError) {
-      console.error("Error parsing OpenAI response:", parseError);
-      throw new Error(`Failed to parse document analysis results: ${parseError.message}`);
     }
+
+    // Merge results from all chunks
+    const analysis = mergeAnalysisResults(analysisResults);
+
     // Update the document with the analysis results
     const { error: updateError } = await supabaseClient.from("documents").update({
       summary: analysis.summary || "",
