@@ -477,13 +477,13 @@ Focus on accuracy and maintain medical terminology. If processing a partial docu
 
         const chunkResponse = await openai.chat.completions.create({
           model: "gpt-4",
-          messages: [
-            {
-              role: "system",
+      messages: [
+        {
+          role: "system",
               content: systemPrompt
-            },
-            {
-              role: "user",
+        },
+        {
+          role: "user",
               content: chunk
             }
           ],

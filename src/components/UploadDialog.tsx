@@ -88,47 +88,47 @@ const UploadDialog = ({ onClose, onUploadComplete }: UploadDialogProps) => {
     const validFiles: FileWithStatus[] = [];
     
     for (const file of files) {
-      if (file.type === "application/pdf") {
-        // Try to load PDF without password
-        const arrayBuffer = await file.arrayBuffer();
-        try {
-          await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-          // Not encrypted, proceed as normal
+    if (file.type === "application/pdf") {
+      // Try to load PDF without password
+      const arrayBuffer = await file.arrayBuffer();
+      try {
+        await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        // Not encrypted, proceed as normal
           validFiles.push({
             file,
             status: 'pending',
             progress: 0
           });
-          setPdfError(null);
-        } catch (err: any) {
-          if (err?.name === "PasswordException") {
-            // Encrypted PDF, prompt for password
-            setPendingFile(file);
-            setShowPasswordModal(true);
-            setPdfError(null);
-          } else {
-            setPdfError("Failed to read PDF file.");
-          }
-        }
-      } else {
-        // Check if file is PDF, DOC, DOCX, or image
-        const fileType = file.type;
-        const fileName = file.name.toLowerCase();
-        if (
-          fileType === "application/pdf" ||
-          fileType === "application/msword" ||
-          fileType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
-          fileType.startsWith("image/") ||
-          fileName.endsWith(".doc") ||
-          fileName.endsWith(".docx")
-        ) {
-          validFiles.push({
-            file,
-            status: 'pending',
-            progress: 0
-          });
+        setPdfError(null);
+      } catch (err: any) {
+        if (err?.name === "PasswordException") {
+          // Encrypted PDF, prompt for password
+          setPendingFile(file);
+          setShowPasswordModal(true);
           setPdfError(null);
         } else {
+          setPdfError("Failed to read PDF file.");
+        }
+      }
+    } else {
+      // Check if file is PDF, DOC, DOCX, or image
+    const fileType = file.type;
+      const fileName = file.name.toLowerCase();
+    if (
+      fileType === "application/pdf" ||
+        fileType === "application/msword" ||
+        fileType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+        fileType.startsWith("image/") ||
+        fileName.endsWith(".doc") ||
+        fileName.endsWith(".docx")
+    ) {
+          validFiles.push({
+            file,
+            status: 'pending',
+            progress: 0
+          });
+        setPdfError(null);
+      } else {
           setUploadError("Please upload PDF, DOC, DOCX, or image files");
           toast.error("Please upload PDF, DOC, DOCX, or image files");
         }
@@ -155,7 +155,7 @@ const UploadDialog = ({ onClose, onUploadComplete }: UploadDialogProps) => {
     } catch (err: any) {
       if (err?.name === "PasswordException") {
         setPdfError("Incorrect password. Please try again.");
-      } else {
+    } else {
         setPdfError("Failed to read PDF file.");
       }
     }
@@ -274,7 +274,7 @@ const UploadDialog = ({ onClose, onUploadComplete }: UploadDialogProps) => {
         setProcessingMessage("Multiple images processed as single document!");
         toast.success("Multiple images processed as single document!");
         
-        if (onUploadComplete) {
+      if (onUploadComplete) {
           onUploadComplete(document.id);
         } else {
           onClose();
@@ -315,8 +315,8 @@ const UploadDialog = ({ onClose, onUploadComplete }: UploadDialogProps) => {
         
         if (onUploadComplete && documents.length > 0) {
           onUploadComplete(documents[0].id); // Navigate to first document
-        } else {
-          onClose();
+      } else {
+        onClose();
         }
       }
     } catch (error: unknown) {
@@ -402,7 +402,7 @@ const UploadDialog = ({ onClose, onUploadComplete }: UploadDialogProps) => {
       >
         <div className="flex flex-col items-center justify-center gap-4">
           <div className="h-12 w-12 rounded-full bg-second/20 flex items-center justify-center">
-            <Upload className="h-6 w-6 text-second" />
+              <Upload className="h-6 w-6 text-second" />
           </div>
           
           <div className="space-y-2">

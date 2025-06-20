@@ -1,26 +1,29 @@
-import { useEffect } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
 import MobileMenu from "@/components/MobileMenu";
-import UploadCard from "@/components/UploadCard";
-import UsageSummary from "@/components/UsageSummary";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
 import DashboardEmptyState from "@/components/DashboardEmptyState";
 import { useDocuments } from "@/hooks/useDocuments";
 import { useSubscription } from "@/hooks/useSubscription";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import DocumentSkeleton from "@/components/DocumentSkeleton";
 import DocumentItem from "@/components/DocumentItem";
 import EmptyDocumentsState from "@/components/EmptyDocumentsState";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import UploadDialog from "@/components/UploadDialog";
+import { Plus } from "lucide-react";
 
 const Dashboard = () => {
   const { user } = useAuth();
-  const { documents, isLoading: isLoadingDocuments } = useDocuments();
+  const { documents, isLoading: isLoadingDocuments, refetchDocuments } = useDocuments();
   const hasDocuments = documents && documents.length > 0;
   const { subscription, isLoading: isLoadingSubscription, hasActiveAccess } = useSubscription();
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const navigate = useNavigate();
   
   const reportsUsed = subscription && (subscription.status === 'active' || subscription.status === 'cancelled' || subscription.status === 'trialing')
     ? 30 - (subscription.reportsRemaining ?? 0)
@@ -36,6 +39,23 @@ const Dashboard = () => {
       sessionStorage.setItem('dashboard_welcome_toast', '1');
     }
   }, [user]);
+
+  const handleUploadClick = useCallback(() => {
+    if (!hasActiveAccess()) {
+      navigate('/dashboard/account');
+      return;
+    }
+    setUploadDialogOpen(true);
+  }, [hasActiveAccess, navigate]);
+
+  const handleUploadComplete = useCallback(async (newDocId: string | null) => {
+    setUploadDialogOpen(false);
+    await refetchDocuments();
+    if (newDocId) {
+      navigate(`/dashboard/documents/${newDocId}`);
+    }
+  }, [navigate, refetchDocuments]);
+
 
   return (
     <div className="flex min-h-screen w-full overflow-x-hidden">
@@ -101,7 +121,21 @@ const Dashboard = () => {
               ) : user ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 w-full min-w-0">
                   <div className="w-full max-w-full min-w-0">
-                    <UploadCard />
+                    <Card className="flex flex-col items-center justify-center p-6 h-full">
+                      <CardHeader>
+                        <CardTitle>New Upload</CardTitle>
+                        <CardDescription>Upload a new medical document</CardDescription>
+                      </CardHeader>
+                      <CardContent className="flex-grow flex items-center justify-center">
+                        <Button
+                          className="bg-second hover:bg-second-dark text-dark text-lg px-8 py-6"
+                          onClick={handleUploadClick}
+                        >
+                          <Plus className="h-5 w-5 mr-3" />
+                          Upload Document
+                        </Button>
+                      </CardContent>
+                    </Card>
                   </div>
                   <div className="w-full max-w-full min-w-0">
                     <Card className="w-full max-w-full">
@@ -141,6 +175,17 @@ const Dashboard = () => {
           </div>
         </main>
       </div>
+      <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+        <DialogContent className="max-w-md mx-4 sm:mx-auto">
+          <DialogHeader>
+            <DialogTitle>Upload Medical Document</DialogTitle>
+          </DialogHeader>
+          <UploadDialog 
+            onClose={() => setUploadDialogOpen(false)} 
+            onUploadComplete={handleUploadComplete} 
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
