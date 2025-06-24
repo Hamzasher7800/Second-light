@@ -13,7 +13,7 @@ const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') || '', {
 });
 const supabaseClient = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
 const PRICE_ID = Deno.env.get('STRIPE_PRICE_ID') || '';
-const DOMAIN = 'https://second-light-ai.netlify.app';
+const DOMAIN = 'https://second-light-uif9.vercel.app/';
 serve(async (req)=>{
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
