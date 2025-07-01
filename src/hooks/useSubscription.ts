@@ -87,11 +87,11 @@ export function useSubscription() {
           variant: "destructive",
         });
       } else {
-        toast({
-          title: "Monthly Limit Reached",
-          description: "You've reached your monthly report limit. Please wait for your next billing cycle.",
-          variant: "destructive",
-        });
+      toast({
+        title: "Monthly Limit Reached",
+        description: "You've reached your monthly report limit. Please wait for your next billing cycle.",
+        variant: "destructive",
+      });
       }
       return false;
     }

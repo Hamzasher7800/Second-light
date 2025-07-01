@@ -377,7 +377,7 @@ export const documentService = {
 
       // Log the request payload for debugging
       console.log('Request payload:', payload);
-
+          
       // Log the response for debugging
       const responseText = await response.text();
       console.log('Raw response:', responseText);
@@ -397,7 +397,7 @@ export const documentService = {
 
       console.log('Processing success:', result);
       return;
-    } catch (error) {
+      } catch (error) {
       // Update document status to error
       const { error: updateError } = await supabase
         .from("documents")

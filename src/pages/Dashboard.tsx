@@ -26,7 +26,7 @@ const Dashboard = () => {
     ? 30 - (subscription.reportsRemaining ?? 0)
     : 0;
   const reportsTotal = 30;
-
+  
   useEffect(() => {
     if (user && !sessionStorage.getItem('dashboard_welcome_toast')) {
       toast({
@@ -76,10 +76,10 @@ const Dashboard = () => {
                         {isLoadingSubscription
                           ? "..."
                           : subscription && (subscription.status === 'active' || subscription.status === 'trialing')
-                            ? "Monthly"
+                          ? "Monthly"
                             : subscription && subscription.status === 'cancelled'
                               ? "Cancelled"
-                              : "Free"}
+                          : "Free"}
                       </div>
                     </div>
                     <div className="flex-1 bg-muted rounded-lg p-6">

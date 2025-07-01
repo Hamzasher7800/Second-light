@@ -25,17 +25,17 @@ export default function VerifyEmailPage() {
 
         if (error) throw error;
 
-        setStatus("success");
-        setMessage("Email verified! Redirecting to login...");
+          setStatus("success");
+          setMessage("Email verified! Redirecting to login...");
         toast({
           title: "Success",
           description: "Email verified successfully. You can now log in.",
         });
         
-        // Redirect to login page after 2 seconds
-        setTimeout(() => {
-          navigate("/auth/login");
-        }, 2000);
+          // Redirect to login page after 2 seconds
+          setTimeout(() => {
+            navigate("/auth/login");
+          }, 2000);
       } catch (error: Error | unknown) {
         setStatus("error");
         setMessage(error instanceof Error ? error.message : "Verification failed.");
